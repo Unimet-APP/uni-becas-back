@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte Operativo de Supervisión - {{periodo}}</title>
+</head>
+<body>
+    <!-- PORTADA -->
+    <div class="portada">
+        <img src="{{logo}}" alt="UNIMET" class="logo">
+        <h1>REPORTE OPERATIVO DE SUPERVISIÓN</h1>
+        <h2>Control y Seguimiento de Ayudantías</h2>
+        <h2>{{periodo}}</h2>
+        <div class="fecha">{{fechaGeneracion}}</div>
+    </div>
+
+    <!-- CONTENIDO -->
+    <div class="contenido">
+        <!-- RESUMEN EJECUTIVO -->
+        <h1>Resumen del Período</h1>
+
+        <div class="dashboard-grid">
+            <div class="dashboard-widget">
+                <h4>Total Supervisores Activos</h4>
+                <div class="valor-principal">{{formatNumber resumen.totalSupervisores}}</div>
+            </div>
+
+            <div class="dashboard-widget">
+                <h4>Total Estudiantes Supervisados</h4>
+                <div class="valor-principal">{{formatNumber resumen.totalEstudiantes}}</div>
+            </div>
+
+            <div class="dashboard-widget">
+                <h4>Ratio Estudiante/Supervisor</h4>
+                <div class="valor-principal">{{formatDecimal resumen.ratioEstudianteSupervisor}}</div>
+            </div>
+
+            <div class="dashboard-widget">
+                <h4>Evaluaciones Pendientes</h4>
+                <div class="valor-principal text-warning">{{formatNumber resumen.evaluacionesPendientes}}</div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 1: CARGA DE TRABAJO POR SUPERVISOR -->
+        <div class="seccion page-break">
+            <h2>1. Distribución de Carga de Trabajo</h2>
+
+            <div class="subseccion">
+                <h3>1.1 Asignación de Estudiantes por Supervisor</h3>
+
+                <table class="tabla-destacada">
+                    <thead>
+                        <tr>
+                            <th>Supervisor</th>
+                            <th>Departamento</th>
+                            <th>Email</th>
+                            <th>Estudiantes Asignados</th>
+                            <th>Carga Relativa</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each supervisores}}
+                        <tr>
+                            <td>{{nombre}} {{apellido}}</td>
+                            <td>{{departamento}}</td>
+                            <td>{{email}}</td>
+                            <td class="text-center">{{cantidadEstudiantes}}</td>
+                            <td>
+                                <div class="progress-bar">
+                                    <div class="progress-bar-fill {{#if (gte cargaPorcentaje 90)}}danger{{else if (gte cargaPorcentaje 70)}}warning{{else}}success{{/if}}"
+                                         style="width: {{cargaPorcentaje}}%">
+                                        {{cargaPorcentaje}}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                {{#if sobrecarga}}
+                                    <span class="badge badge-danger">Sobrecarga</span>
+                                {{else if (gte cantidadEstudiantes 8)}}
+                                    <span class="badge badge-warning">Alta</span>
+                                {{else}}
+                                    <span class="badge badge-success">Normal</span>
+                                {{/if}}
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+
+                {{#if graficos.distribucionCarga}}
+                <div class="grafico-container">
+                    <img src="{{graficos.distribucionCarga}}" alt="Distribución de Carga">
+                    <p class="grafico-titulo">Figura 1: Distribución de estudiantes por supervisor</p>
+                </div>
+                {{/if}}
+            </div>
+
+            <div class="subseccion">
+                <h3>1.2 Supervisores con Sobrecarga</h3>
+
+                {{#if supervisoresSobrecarga}}
+                <div class="alerta warning">
+                    <span class="icono">⚠️</span>
+                    <div>
+                        <strong>{{length supervisoresSobrecarga}} supervisores</strong> tienen más de 10 estudiantes asignados.
+                        Se recomienda redistribuir la carga de trabajo.
+                    </div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Supervisor</th>
+                            <th>Estudiantes Actuales</th>
+                            <th>Exceso</th>
+                            <th>Estudiantes para Reasignar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each supervisoresSobrecarga}}
+                        <tr>
+                            <td>{{nombre}} {{apellido}}</td>
+                            <td class="text-center text-danger">{{cantidadEstudiantes}}</td>
+                            <td class="text-center">+{{exceso}}</td>
+                            <td>
+                                <ul class="lista-compacta">
+                                    {{#each estudiantesReasignar}}
+                                    <li>{{nombre}} ({{horasCompletadas}}h de {{horasRequeridas}}h)</li>
+                                    {{/each}}
+                                </ul>
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+                {{else}}
+                <div class="alerta success">
+                    <span class="icono">✓</span>
+                    <div>
+                        Todos los supervisores tienen una carga de trabajo adecuada.
+                    </div>
+                </div>
+                {{/if}}
+            </div>
+        </div>
+
+        <!-- SECCIÓN 2: SEGUIMIENTO DE HORAS -->
+        <div class="seccion page-break">
+            <h2>2. Control de Horas por Supervisor</h2>
+
+            <div class="subseccion">
+                <h3>2.1 Resumen de Horas Supervisadas</h3>
+
+                <table class="tabla-destacada">
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Supervisor</th>
+                            <th colspan="3">Horas Registradas</th>
+                            <th colspan="2">Aprobaciones</th>
+                            <th rowspan="2">Tiempo Promedio<br>Aprobación</th>
+                        </tr>
+                        <tr>
+                            <th>Total</th>
+                            <th>Aprobadas</th>
+                            <th>Pendientes</th>
+                            <th>Tasa</th>
+                            <th>Rechazadas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each controlHoras}}
+                        <tr>
+                            <td>{{supervisor}}</td>
+                            <td class="text-right">{{formatNumber horasTotales}}</td>
+                            <td class="text-right">{{formatNumber horasAprobadas}}</td>
+                            <td class="text-right {{#if (gt horasPendientes 50)}}text-warning{{/if}}">
+                                {{formatNumber horasPendientes}}
+                            </td>
+                            <td class="text-center">
+                                <span class="{{#if (gte tasaAprobacion 90)}}text-success{{else if (gte tasaAprobacion 70)}}text-warning{{else}}text-danger{{/if}}">
+                                    {{tasaAprobacion}}%
+                                </span>
+                            </td>
+                            <td class="text-center">{{formatNumber horasRechazadas}}</td>
+                            <td class="text-center">{{tiempoPromedioAprobacion}}</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subseccion">
+                <h3>2.2 Horas Pendientes de Aprobación (Críticas)</h3>
+
+                {{#if horasCriticas}}
+                <div class="alerta error">
+                    <span class="icono">🔴</span>
+                    <div>
+                        <strong>{{formatNumber totalHorasCriticas}} horas</strong> llevan más de 7 días esperando aprobación.
+                        Esto puede afectar el cumplimiento de los estudiantes.
+                    </div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Estudiante</th>
+                            <th>Supervisor</th>
+                            <th>Horas</th>
+                            <th>Fecha Registro</th>
+                            <th>Días Esperando</th>
+                            <th>Actividad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each horasCriticas}}
+                        <tr class="{{#if (gte diasEsperando 14)}}bg-danger-light{{/if}}">
+                            <td>{{estudiante}}</td>
+                            <td>{{supervisor}}</td>
+                            <td class="text-center">{{formatDecimal horas}}</td>
+                            <td>{{formatDate fechaRegistro}}</td>
+                            <td class="text-center text-danger">{{diasEsperando}} días</td>
+                            <td>{{actividad}}</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+                {{else}}
+                <div class="alerta success">
+                    <span class="icono">✓</span>
+                    <div>
+                        No hay horas críticas pendientes de aprobación.
+                    </div>
+                </div>
+                {{/if}}
+            </div>
+        </div>
+
+        <!-- SECCIÓN 3: EVALUACIONES -->
+        <div class="seccion page-break">
+            <h2>3. Estado de Evaluaciones</h2>
+
+            <div class="subseccion">
+                <h3>3.1 Resumen de Evaluaciones del Período</h3>
+
+                <div class="dashboard-grid">
+                    <div class="dashboard-widget">
+                        <h4>Completadas</h4>
+                        <div class="valor-principal text-success">{{formatNumber evaluaciones.completadas}}</div>
+                        <div class="tendencia">{{formatPercent evaluaciones.porcentajeCompletadas}}% del total</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Pendientes</h4>
+                        <div class="valor-principal text-warning">{{formatNumber evaluaciones.pendientes}}</div>
+                        <div class="tendencia">Vencen en {{evaluaciones.diasParaVencer}} días</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Vencidas</h4>
+                        <div class="valor-principal text-danger">{{formatNumber evaluaciones.vencidas}}</div>
+                        <div class="tendencia">Requieren acción inmediata</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Satisfactorias</h4>
+                        <div class="valor-principal">{{evaluaciones.porcentajeSatisfactorias}}%</div>
+                        <div class="tendencia">Del total evaluado</div>
+                    </div>
+                </div>
+
+                {{#if graficos.estadoEvaluaciones}}
+                <div class="grafico-container">
+                    <img src="{{graficos.estadoEvaluaciones}}" alt="Estado de Evaluaciones">
+                    <p class="grafico-titulo">Figura 2: Estado actual de las evaluaciones del período</p>
+                </div>
+                {{/if}}
+            </div>
+
+            <div class="subseccion">
+                <h3>3.2 Evaluaciones Pendientes por Supervisor</h3>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Supervisor</th>
+                            <th>Estudiante</th>
+                            <th>Tipo Evaluación</th>
+                            <th>Fecha Límite</th>
+                            <th>Estado</th>
+                            <th>Acción Requerida</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each evaluacionesPendientes}}
+                        <tr class="{{#if vencida}}bg-danger-light{{else if (lte diasRestantes 3)}}bg-warning-light{{/if}}">
+                            <td>{{supervisor}}</td>
+                            <td>{{estudiante}}</td>
+                            <td>{{tipoEvaluacion}}</td>
+                            <td>{{formatDate fechaLimite}}</td>
+                            <td>
+                                {{#if vencida}}
+                                    <span class="badge badge-danger">Vencida</span>
+                                {{else if (lte diasRestantes 3)}}
+                                    <span class="badge badge-warning">Urgente</span>
+                                {{else}}
+                                    <span class="badge badge-info">Pendiente</span>
+                                {{/if}}
+                            </td>
+                            <td>
+                                {{#if vencida}}
+                                    Evaluar inmediatamente
+                                {{else}}
+                                    Evaluar antes de {{diasRestantes}} días
+                                {{/if}}
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subseccion">
+                <h3>3.3 Calidad de las Evaluaciones</h3>
+
+                <table class="tabla-destacada">
+                    <thead>
+                        <tr>
+                            <th>Supervisor</th>
+                            <th>Evaluaciones<br>Realizadas</th>
+                            <th>Promedio<br>Calificación</th>
+                            <th>Comentarios<br>Detallados</th>
+                            <th>Recomendaciones<br>de Mejora</th>
+                            <th>Calidad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each calidadEvaluaciones}}
+                        <tr>
+                            <td>{{supervisor}}</td>
+                            <td class="text-center">{{evaluacionesRealizadas}}</td>
+                            <td class="text-center">
+                                {{#if (gte promedioCalificacion 4.5)}}
+                                    <span class="text-success">{{formatDecimal promedioCalificacion}}/5</span>
+                                {{else if (gte promedioCalificacion 3.5)}}
+                                    <span class="text-warning">{{formatDecimal promedioCalificacion}}/5</span>
+                                {{else}}
+                                    <span class="text-danger">{{formatDecimal promedioCalificacion}}/5</span>
+                                {{/if}}
+                            </td>
+                            <td class="text-center">{{porcentajeConComentarios}}%</td>
+                            <td class="text-center">{{porcentajeConRecomendaciones}}%</td>
+                            <td>
+                                {{#if (gte calidadScore 85)}}
+                                    <span class="badge badge-success">Excelente</span>
+                                {{else if (gte calidadScore 70)}}
+                                    <span class="badge badge-warning">Buena</span>
+                                {{else}}
+                                    <span class="badge badge-danger">Mejorable</span>
+                                {{/if}}
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 4: DESEMPEÑO DE ESTUDIANTES POR SUPERVISOR -->
+        <div class="seccion page-break">
+            <h2>4. Desempeño de Estudiantes por Supervisor</h2>
+
+            <div class="subseccion">
+                <h3>4.1 Métricas de Rendimiento</h3>
+
+                <table class="tabla-destacada">
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Supervisor</th>
+                            <th colspan="4">Estudiantes</th>
+                            <th colspan="3">Cumplimiento Promedio</th>
+                        </tr>
+                        <tr>
+                            <th>Total</th>
+                            <th>En Riesgo</th>
+                            <th>Por Encima</th>
+                            <th>Completados</th>
+                            <th>Horas</th>
+                            <th>Asistencia</th>
+                            <th>Calidad</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each desempeño}}
+                        <tr>
+                            <td>{{supervisor}}</td>
+                            <td class="text-center">{{totalEstudiantes}}</td>
+                            <td class="text-center text-danger">{{estudiantesEnRiesgo}}</td>
+                            <td class="text-center text-success">{{estudiantesSobresalientes}}</td>
+                            <td class="text-center">{{estudiantesCompletados}}</td>
+                            <td class="text-center">
+                                <span class="{{#if (gte cumplimientoHoras 90)}}text-success{{else if (gte cumplimientoHoras 70)}}text-warning{{else}}text-danger{{/if}}">
+                                    {{cumplimientoHoras}}%
+                                </span>
+                            </td>
+                            <td class="text-center">{{asistenciaPromedio}}%</td>
+                            <td class="text-center">{{calidadPromedio}}/5</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+
+                {{#if graficos.desempeñoComparativo}}
+                <div class="grafico-container">
+                    <img src="{{graficos.desempeñoComparativo}}" alt="Desempeño Comparativo">
+                    <p class="grafico-titulo">Figura 3: Comparación de desempeño entre supervisores</p>
+                </div>
+                {{/if}}
+            </div>
+
+            <div class="subseccion">
+                <h3>4.2 Estudiantes que Requieren Atención Especial</h3>
+
+                {{#each estudiantesAtencion}}
+                <div class="alerta {{tipoAlerta}}">
+                    <span class="icono">{{icono}}</span>
+                    <div>
+                        <strong>{{estudiante}}</strong> (Supervisor: {{supervisor}})
+                        <br>{{razon}}
+                        <br><small>Recomendación: {{recomendacion}}</small>
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </div>
+
+        <!-- SECCIÓN 5: RECOMENDACIONES OPERATIVAS -->
+        <div class="seccion page-break">
+            <h2>5. Recomendaciones Operativas</h2>
+
+            <div class="subseccion">
+                <h3>5.1 Acciones Inmediatas Requeridas</h3>
+
+                <ol class="lista-numerada">
+                    {{#each accionesInmediatas}}
+                    <li>
+                        <strong>{{titulo}}</strong>
+                        <span class="badge badge-{{prioridad}}">{{prioridadTexto}}</span>
+                        <p>{{descripcion}}</p>
+                        <ul>
+                            {{#each pasos}}
+                            <li>{{this}}</li>
+                            {{/each}}
+                        </ul>
+                    </li>
+                    {{/each}}
+                </ol>
+            </div>
+
+            <div class="subseccion">
+                <h3>5.2 Optimizaciones Sugeridas</h3>
+
+                <div class="insights">
+                    <h3>💡 Oportunidades de Mejora</h3>
+                    <ul>
+                        {{#each optimizaciones}}
+                        <li>
+                            <span class="icono">{{icono}}</span>
+                            <div class="contenido">
+                                <div class="titulo">{{area}}</div>
+                                <div class="descripcion">{{sugerencia}}</div>
+                                <div class="descripcion"><strong>Impacto esperado:</strong> {{impacto}}</div>
+                            </div>
+                        </li>
+                        {{/each}}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="subseccion">
+                <h3>5.3 Mejores Prácticas Identificadas</h3>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Supervisor</th>
+                            <th>Práctica Destacada</th>
+                            <th>Resultado Obtenido</th>
+                            <th>Recomendación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each mejoresPracticas}}
+                        <tr>
+                            <td>{{supervisor}}</td>
+                            <td>{{practica}}</td>
+                            <td>{{resultado}}</td>
+                            <td>{{recomendacion}}</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 6: MÉTRICAS DE EFICIENCIA -->
+        <div class="seccion">
+            <h2>6. Indicadores de Eficiencia Operativa</h2>
+
+            <div class="dashboard-grid">
+                <div class="dashboard-widget">
+                    <h4>Tiempo Promedio de Respuesta</h4>
+                    <div class="valor-principal">{{metricas.tiempoRespuesta}} días</div>
+                    <div class="tendencia {{metricas.tendenciaRespuesta}}">
+                        {{#if (eq metricas.tendenciaRespuesta 'mejorando')}}
+                            ↓ Mejorando
+                        {{else}}
+                            ↑ Empeorando
+                        {{/if}}
+                    </div>
+                </div>
+
+                <div class="dashboard-widget">
+                    <h4>Tasa de Resolución</h4>
+                    <div class="valor-principal">{{metricas.tasaResolucion}}%</div>
+                    <div class="tendencia">Primera instancia</div>
+                </div>
+
+                <div class="dashboard-widget">
+                    <h4>Satisfacción Estudiantes</h4>
+                    <div class="valor-principal">{{metricas.satisfaccion}}/5</div>
+                    <div class="tendencia">Basado en evaluaciones</div>
+                </div>
+
+                <div class="dashboard-widget">
+                    <h4>Eficiencia Global</h4>
+                    <div class="valor-principal {{#if (gte metricas.eficienciaGlobal 85)}}text-success{{else if (gte metricas.eficienciaGlobal 70)}}text-warning{{else}}text-danger{{/if}}">
+                        {{metricas.eficienciaGlobal}}%
+                    </div>
+                    <div class="tendencia">Score compuesto</div>
+                </div>
+            </div>
+
+            {{#if graficos.tendenciaEficiencia}}
+            <div class="grafico-container">
+                <img src="{{graficos.tendenciaEficiencia}}" alt="Tendencia de Eficiencia">
+                <p class="grafico-titulo">Figura 4: Evolución de la eficiencia operativa en el último trimestre</p>
+            </div>
+            {{/if}}
+        </div>
+    </div>
+
+    <!-- PIE DE PÁGINA -->
+    <div class="page-footer">
+        <p>{{universidad}} - {{sistema}}</p>
+        <p>Reporte Operativo de Supervisión</p>
+        <p>Generado el {{fechaGeneracion}} a las {{horaGeneracion}}</p>
+        <p>Este documento contiene información operativa confidencial</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,251 @@
+const router = require('express').Router();
+const reportesEjecutivosController = require('../controllers/reportesEjecutivosController');
+const { authenticate } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roles');
+
+/**
+ * @swagger
+ * tags:
+ *   name: Reportes Ejecutivos
+ *   description: Reportes ejecutivos y análisis avanzados para gestión administrativa
+ */
+
+/**
+ * @swagger
+ * /api/v1/reportes-ejecutivos/informe-ejecutivo:
+ *   get:
+ *     summary: Generar Informe Ejecutivo de Período Académico
+ *     tags: [Reportes Ejecutivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: periodo
+ *         schema:
+ *           type: string
+ *         description: Período académico (ej. 2025-1)
+ *       - in: query
+ *         name: formato
+ *         schema:
+ *           type: string
+ *           enum: [pdf, excel, json]
+ *           default: pdf
+ *         description: Formato de salida del reporte
+ *       - in: query
+ *         name: incluirGraficos
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Incluir gráficos en el reporte
+ *       - in: query
+ *         name: incluirProyecciones
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Incluir proyecciones en el reporte
+ *     responses:
+ *       200:
+ *         description: Reporte generado exitosamente
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       403:
+ *         description: No autorizado para acceder a reportes ejecutivos
+ */
+router.get(
+  '/informe-ejecutivo',
+  authenticate,
+  requireRole(['admin', 'gestor-becas', 'capital-humano', 'director-area']),
+  reportesEjecutivosController.generarInformeEjecutivo
+);
+
+/**
+ * @swagger
+ * /api/v1/reportes-ejecutivos/operativo-supervision:
+ *   get:
+ *     summary: Generar Reporte Operativo de Supervisión
+ *     tags: [Reportes Ejecutivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: periodo
+ *         schema:
+ *           type: string
+ *         description: Período académico (ej. 2025-1)
+ *       - in: query
+ *         name: formato
+ *         schema:
+ *           type: string
+ *           enum: [pdf, excel, json]
+ *           default: pdf
+ *         description: Formato de salida del reporte
+ *       - in: query
+ *         name: supervisorId
+ *         schema:
+ *           type: string
+ *         description: Filtrar por supervisor específico
+ *       - in: query
+ *         name: departamento
+ *         schema:
+ *           type: string
+ *         description: Filtrar por departamento
+ *     responses:
+ *       200:
+ *         description: Reporte generado exitosamente
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       403:
+ *         description: No autorizado para acceder a reportes ejecutivos
+ */
+router.get(
+  '/operativo-supervision',
+  authenticate,
+  requireRole(['admin', 'gestor-becas', 'capital-humano', 'director-area']),
+  reportesEjecutivosController.generarReporteOperativo
+);
+
+/**
+ * @swagger
+ * /api/v1/reportes-ejecutivos/dashboard-cumplimiento:
+ *   get:
+ *     summary: Generar Dashboard de Cumplimiento y Rendimiento
+ *     tags: [Reportes Ejecutivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: periodo
+ *         schema:
+ *           type: string
+ *         description: Período académico (ej. 2025-1)
+ *       - in: query
+ *         name: formato
+ *         schema:
+ *           type: string
+ *           enum: [pdf, excel, json]
+ *           default: pdf
+ *         description: Formato de salida del reporte
+ *       - in: query
+ *         name: tipoBeca
+ *         schema:
+ *           type: string
+ *         description: Filtrar por tipo de beca
+ *       - in: query
+ *         name: departamento
+ *         schema:
+ *           type: string
+ *         description: Filtrar por departamento
+ *       - in: query
+ *         name: nivelRiesgo
+ *         schema:
+ *           type: string
+ *           enum: [critico, alto, medio, bajo]
+ *         description: Filtrar por nivel de riesgo
+ *     responses:
+ *       200:
+ *         description: Dashboard generado exitosamente
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       403:
+ *         description: No autorizado para acceder a reportes ejecutivos
+ */
+router.get(
+  '/dashboard-cumplimiento',
+  authenticate,
+  requireRole(['admin', 'gestor-becas', 'capital-humano', 'director-area']),
+  reportesEjecutivosController.generarDashboardCumplimiento
+);
+
+/**
+ * @swagger
+ * /api/v1/reportes-ejecutivos/analisis-predictivo:
+ *   get:
+ *     summary: Generar Análisis Predictivo y Planificación Estratégica
+ *     tags: [Reportes Ejecutivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: formato
+ *         schema:
+ *           type: string
+ *           enum: [pdf, excel, json]
+ *           default: pdf
+ *         description: Formato de salida del reporte
+ *       - in: query
+ *         name: periodosHistoricos
+ *         schema:
+ *           type: integer
+ *           default: 8
+ *         description: Número de períodos históricos a analizar
+ *       - in: query
+ *         name: incluirSimulacion
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Incluir simulación Monte Carlo
+ *       - in: query
+ *         name: escenarios
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *             enum: [optimista, base, pesimista]
+ *           default: [optimista, base, pesimista]
+ *         description: Escenarios a evaluar
+ *     responses:
+ *       200:
+ *         description: Análisis predictivo generado exitosamente
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       403:
+ *         description: No autorizado para acceder a reportes ejecutivos
+ */
+router.get(
+  '/analisis-predictivo',
+  authenticate,
+  requireRole(['admin', 'gestor-becas', 'capital-humano', 'director-area']),
+  reportesEjecutivosController.generarAnalisisPredictivo
+);
+
+module.exports = router;

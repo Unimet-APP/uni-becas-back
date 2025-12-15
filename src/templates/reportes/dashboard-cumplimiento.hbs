@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Cumplimiento - {{periodo}}</title>
+</head>
+<body>
+    <!-- PORTADA -->
+    <div class="portada">
+        <img src="{{logo}}" alt="UNIMET" class="logo">
+        <h1>DASHBOARD DE CUMPLIMIENTO</h1>
+        <h2>Indicadores de Rendimiento y Progreso</h2>
+        <h2>{{periodo}}</h2>
+        <div class="fecha">{{fechaGeneracion}}</div>
+    </div>
+
+    <!-- CONTENIDO -->
+    <div class="contenido">
+        <!-- INDICADORES PRINCIPALES -->
+        <h1>Indicadores Clave de Desempeño</h1>
+
+        <div class="kpi-container">
+            {{#each kpisGlobales}}
+            <div class="kpi-card semaforo-{{semaforo}}">
+                <h4>{{nombre}}</h4>
+                <div class="valor">
+                    {{#if esporcentaje}}
+                        {{valor}}%
+                    {{else}}
+                        {{formatNumber valor}}
+                    {{/if}}
+                </div>
+                <div class="meta">Meta: {{meta}}</div>
+                <div class="cambio {{direccion}}">
+                    <span class="icono">{{#if (gt variacion 0)}}↑{{else}}↓{{/if}}</span>
+                    <span>{{abs variacion}}% vs período anterior</span>
+                </div>
+            </div>
+            {{/each}}
+        </div>
+
+        <!-- SECCIÓN 1: CUMPLIMIENTO GLOBAL -->
+        <div class="seccion page-break">
+            <h2>1. Análisis de Cumplimiento Global</h2>
+
+            <div class="subseccion">
+                <h3>1.1 Cumplimiento por Programa de Beca</h3>
+
+                <table class="tabla-destacada">
+                    <thead>
+                        <tr>
+                            <th>Programa</th>
+                            <th>Beneficiarios</th>
+                            <th>Cumplimiento<br>Promedio</th>
+                            <th>En Riesgo</th>
+                            <th>Completados</th>
+                            <th>Proyección<br>Fin Período</th>
+                            <th>Tendencia</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each cumplimientoPorPrograma}}
+                        <tr>
+                            <td>{{programa}}</td>
+                            <td class="text-center">{{formatNumber beneficiarios}}</td>
+                            <td class="text-center">
+                                <div class="progress-bar">
+                                    <div class="progress-bar-fill {{#if (gte cumplimientoPromedio 80)}}success{{else if (gte cumplimientoPromedio 60)}}warning{{else}}danger{{/if}}"
+                                         style="width: {{cumplimientoPromedio}}%">
+                                        {{cumplimientoPromedio}}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center text-danger">{{enRiesgo}}</td>
+                            <td class="text-center text-success">{{completados}}</td>
+                            <td class="text-center">
+                                <span class="{{#if (gte proyeccion 90)}}text-success{{else if (gte proyeccion 75)}}text-warning{{else}}text-danger{{/if}}">
+                                    {{proyeccion}}%
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                {{#if (eq tendencia 'mejorando')}}
+                                    <span class="badge badge-success">↑</span>
+                                {{else if (eq tendencia 'estable')}}
+                                    <span class="badge badge-warning">→</span>
+                                {{else}}
+                                    <span class="badge badge-danger">↓</span>
+                                {{/if}}
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+
+                {{#if graficos.cumplimientoPorPrograma}}
+                <div class="grafico-container">
+                    <img src="{{graficos.cumplimientoPorPrograma}}" alt="Cumplimiento por Programa">
+                    <p class="grafico-titulo">Figura 1: Comparación de cumplimiento entre programas de becas</p>
+                </div>
+                {{/if}}
+            </div>
+
+            <div class="subseccion">
+                <h3>1.2 Evolución Temporal del Cumplimiento</h3>
+
+                {{#if graficos.evolucionCumplimiento}}
+                <div class="grafico-container">
+                    <img src="{{graficos.evolucionCumplimiento}}" alt="Evolución del Cumplimiento">
+                    <p class="grafico-titulo">Figura 2: Evolución del cumplimiento en las últimas 12 semanas</p>
+                </div>
+                {{/if}}
+
+                <div class="dashboard-grid">
+                    <div class="dashboard-widget">
+                        <h4>Velocidad de Progreso</h4>
+                        <div class="valor-principal">{{velocidadProgreso}}%</div>
+                        <div class="tendencia">Por semana</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Semanas Restantes</h4>
+                        <div class="valor-principal">{{semanasRestantes}}</div>
+                        <div class="tendencia">Para fin de período</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Ritmo Requerido</h4>
+                        <div class="valor-principal {{#if (gt ritmoRequerido ritmoActual)}}text-danger{{else}}text-success{{/if}}">
+                            {{ritmoRequerido}}%
+                        </div>
+                        <div class="tendencia">Semanal para cumplir meta</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 2: ANÁLISIS POR DEPARTAMENTO -->
+        <div class="seccion page-break">
+            <h2>2. Rendimiento por Departamento</h2>
+
+            <div class="subseccion">
+                <h3>2.1 Comparativo Departamental</h3>
+
+                {{#if graficos.heatmapDepartamentos}}
+                <div class="grafico-container">
+                    <img src="{{graficos.heatmapDepartamentos}}" alt="Heatmap Departamental">
+                    <p class="grafico-titulo">Figura 3: Mapa de calor - Rendimiento por departamento y tipo de beca</p>
+                </div>
+                {{/if}}
+
+                <table class="tabla-destacada">
+                    <thead>
+                        <tr>
+                            <th>Departamento</th>
+                            <th>Estudiantes</th>
+                            <th>Horas<br>Promedio</th>
+                            <th>Asistencia</th>
+                            <th>Evaluación<br>Promedio</th>
+                            <th>Retención</th>
+                            <th>Score<br>Global</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each rendimientoDepartamentos}}
+                        <tr>
+                            <td>{{departamento}}</td>
+                            <td class="text-center">{{estudiantes}}</td>
+                            <td class="text-center">{{horasPromedio}}</td>
+                            <td class="text-center">
+                                <span class="{{#if (gte asistencia 95)}}text-success{{else if (gte asistencia 85)}}text-warning{{else}}text-danger{{/if}}">
+                                    {{asistencia}}%
+                                </span>
+                            </td>
+                            <td class="text-center">{{formatDecimal evaluacionPromedio}}/5</td>
+                            <td class="text-center">{{retencion}}%</td>
+                            <td class="text-center">
+                                <div class="badge badge-{{#if (gte scoreGlobal 90)}}success{{else if (gte scoreGlobal 75)}}warning{{else}}danger{{/if}}">
+                                    {{scoreGlobal}}
+                                </div>
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subseccion">
+                <h3>2.2 Top 5 Mejores y Peores Desempeños</h3>
+
+                <div class="graficos-grid">
+                    <div>
+                        <h4 class="text-success">🏆 Top 5 Mejores Departamentos</h4>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Departamento</th>
+                                    <th>Score</th>
+                                    <th>Diferencial</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each topDepartamentos}}
+                                <tr>
+                                    <td>{{posicion}}</td>
+                                    <td>{{nombre}}</td>
+                                    <td class="text-center text-success">{{score}}</td>
+                                    <td class="text-center">+{{diferencial}}%</td>
+                                </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div>
+                        <h4 class="text-danger">⚠️ Bottom 5 Departamentos</h4>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Departamento</th>
+                                    <th>Score</th>
+                                    <th>Brecha</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each bottomDepartamentos}}
+                                <tr>
+                                    <td>{{posicion}}</td>
+                                    <td>{{nombre}}</td>
+                                    <td class="text-center text-danger">{{score}}</td>
+                                    <td class="text-center">-{{brecha}}%</td>
+                                </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 3: ANÁLISIS DE RIESGOS -->
+        <div class="seccion page-break">
+            <h2>3. Matriz de Riesgos de Incumplimiento</h2>
+
+            <div class="subseccion">
+                <h3>3.1 Identificación de Estudiantes en Riesgo</h3>
+
+                <div class="dashboard-grid">
+                    <div class="dashboard-widget">
+                        <h4>Riesgo Crítico</h4>
+                        <div class="valor-principal text-danger">{{riesgos.critico}}</div>
+                        <div class="tendencia">&lt; 40% cumplimiento</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Riesgo Alto</h4>
+                        <div class="valor-principal text-warning">{{riesgos.alto}}</div>
+                        <div class="tendencia">40-60% cumplimiento</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Riesgo Medio</h4>
+                        <div class="valor-principal text-info">{{riesgos.medio}}</div>
+                        <div class="tendencia">60-75% cumplimiento</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Sin Riesgo</h4>
+                        <div class="valor-principal text-success">{{riesgos.sinRiesgo}}</div>
+                        <div class="tendencia">&gt; 75% cumplimiento</div>
+                    </div>
+                </div>
+
+                {{#if graficos.matrizRiesgo}}
+                <div class="grafico-container">
+                    <img src="{{graficos.matrizRiesgo}}" alt="Matriz de Riesgo">
+                    <p class="grafico-titulo">Figura 4: Matriz de riesgo - Probabilidad vs Impacto</p>
+                </div>
+                {{/if}}
+            </div>
+
+            <div class="subseccion">
+                <h3>3.2 Estudiantes en Riesgo Crítico - Requieren Intervención Inmediata</h3>
+
+                {{#if estudiantesRiesgoCritico}}
+                <div class="alerta error">
+                    <span class="icono">🔴</span>
+                    <div>
+                        <strong>{{length estudiantesRiesgoCritico}} estudiantes</strong> están en riesgo crítico de no cumplir con los requisitos mínimos.
+                    </div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Estudiante</th>
+                            <th>Programa</th>
+                            <th>Supervisor</th>
+                            <th>Cumplimiento<br>Actual</th>
+                            <th>Proyección</th>
+                            <th>Factores de Riesgo</th>
+                            <th>Plan de Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each estudiantesRiesgoCritico}}
+                        <tr class="bg-danger-light">
+                            <td>
+                                <strong>{{nombre}}</strong>
+                                <br><small>{{email}}</small>
+                            </td>
+                            <td>{{programa}}</td>
+                            <td>{{supervisor}}</td>
+                            <td class="text-center text-danger">
+                                <strong>{{cumplimiento}}%</strong>
+                            </td>
+                            <td class="text-center">{{proyeccion}}%</td>
+                            <td>
+                                <ul class="lista-compacta">
+                                    {{#each factoresRiesgo}}
+                                    <li>{{this}}</li>
+                                    {{/each}}
+                                </ul>
+                            </td>
+                            <td>
+                                <button class="btn-small btn-danger">Ver Plan</button>
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+                {{/if}}
+            </div>
+
+            <div class="subseccion">
+                <h3>3.3 Análisis de Causas Raíz</h3>
+
+                {{#if graficos.causasIncumplimiento}}
+                <div class="grafico-container">
+                    <img src="{{graficos.causasIncumplimiento}}" alt="Causas de Incumplimiento">
+                    <p class="grafico-titulo">Figura 5: Principales causas de incumplimiento identificadas</p>
+                </div>
+                {{/if}}
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Causa</th>
+                            <th>Frecuencia</th>
+                            <th>Impacto</th>
+                            <th>Estudiantes<br>Afectados</th>
+                            <th>Medida Correctiva</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each causasRaiz}}
+                        <tr>
+                            <td>{{causa}}</td>
+                            <td class="text-center">
+                                <div class="progress-bar">
+                                    <div class="progress-bar-fill danger" style="width: {{frecuenciaPorcentaje}}%">
+                                        {{frecuencia}}
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-{{impactoNivel}}">{{impacto}}</span>
+                            </td>
+                            <td class="text-center">{{estudiantesAfectados}}</td>
+                            <td>{{medidaCorrectiva}}</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 4: MÉTRICAS DE RENDIMIENTO -->
+        <div class="seccion page-break">
+            <h2>4. Métricas Detalladas de Rendimiento</h2>
+
+            <div class="subseccion">
+                <h3>4.1 Distribución de Calificaciones</h3>
+
+                <div class="graficos-grid">
+                    {{#if graficos.distribucionCalificaciones}}
+                    <div class="grafico-container">
+                        <img src="{{graficos.distribucionCalificaciones}}" alt="Distribución de Calificaciones">
+                        <p class="grafico-titulo">Figura 6: Curva de distribución de evaluaciones</p>
+                    </div>
+                    {{/if}}
+
+                    <div>
+                        <h4>Estadísticas de Evaluación</h4>
+                        <table>
+                            <tr>
+                                <th>Métrica</th>
+                                <th>Valor</th>
+                            </tr>
+                            <tr>
+                                <td>Promedio General</td>
+                                <td class="text-right">{{formatDecimal estadisticas.promedioGeneral}}/5</td>
+                            </tr>
+                            <tr>
+                                <td>Mediana</td>
+                                <td class="text-right">{{formatDecimal estadisticas.mediana}}/5</td>
+                            </tr>
+                            <tr>
+                                <td>Moda</td>
+                                <td class="text-right">{{formatDecimal estadisticas.moda}}/5</td>
+                            </tr>
+                            <tr>
+                                <td>Desviación Estándar</td>
+                                <td class="text-right">{{formatDecimal estadisticas.desviacion}}</td>
+                            </tr>
+                            <tr>
+                                <td>Excelentes (≥4.5)</td>
+                                <td class="text-right">{{estadisticas.porcentajeExcelentes}}%</td>
+                            </tr>
+                            <tr>
+                                <td>Satisfactorios (≥3.5)</td>
+                                <td class="text-right">{{estadisticas.porcentajeSatisfactorios}}%</td>
+                            </tr>
+                            <tr>
+                                <td>Deficientes (<3.5)</td>
+                                <td class="text-right">{{estadisticas.porcentajeDeficientes}}%</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="subseccion">
+                <h3>4.2 Análisis de Correlaciones</h3>
+
+                <table class="tabla-destacada">
+                    <thead>
+                        <tr>
+                            <th>Factor</th>
+                            <th>Correlación con<br>Cumplimiento</th>
+                            <th>Interpretación</th>
+                            <th>Significancia</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each correlaciones}}
+                        <tr>
+                            <td>{{factor}}</td>
+                            <td class="text-center">
+                                <span class="{{#if (gt correlacion 0.5)}}text-success{{else if (lt correlacion -0.5)}}text-danger{{else}}text-warning{{/if}}">
+                                    {{formatDecimal correlacion}}
+                                </span>
+                            </td>
+                            <td>{{interpretacion}}</td>
+                            <td class="text-center">
+                                {{#if significativo}}
+                                    <span class="badge badge-success">Significativo</span>
+                                {{else}}
+                                    <span class="badge badge-gray">No significativo</span>
+                                {{/if}}
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subseccion">
+                <h3>4.3 Benchmarking Histórico</h3>
+
+                {{#if graficos.benchmarkingHistorico}}
+                <div class="grafico-container">
+                    <img src="{{graficos.benchmarkingHistorico}}" alt="Benchmarking Histórico">
+                    <p class="grafico-titulo">Figura 7: Comparación con períodos anteriores (últimos 6 períodos)</p>
+                </div>
+                {{/if}}
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Período</th>
+                            <th>Tasa de<br>Cumplimiento</th>
+                            <th>Promedio<br>Horas</th>
+                            <th>Evaluación<br>Promedio</th>
+                            <th>Retención</th>
+                            <th>Variación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each benchmarkHistorico}}
+                        <tr {{#if esActual}}class="bg-primary-light"{{/if}}>
+                            <td>
+                                {{periodo}}
+                                {{#if esActual}}<span class="badge badge-primary">Actual</span>{{/if}}
+                            </td>
+                            <td class="text-center">{{tasaCumplimiento}}%</td>
+                            <td class="text-center">{{promedioHoras}}</td>
+                            <td class="text-center">{{evaluacionPromedio}}/5</td>
+                            <td class="text-center">{{retencion}}%</td>
+                            <td class="text-center">
+                                {{#if variacion}}
+                                    <span class="{{#if (gt variacion 0)}}text-success{{else}}text-danger{{/if}}">
+                                        {{#if (gt variacion 0)}}+{{/if}}{{variacion}}%
+                                    </span>
+                                {{else}}
+                                    -
+                                {{/if}}
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 5: INDICADORES PREDICTIVOS -->
+        <div class="seccion page-break">
+            <h2>5. Indicadores Predictivos</h2>
+
+            <div class="subseccion">
+                <h3>5.1 Proyección de Cumplimiento</h3>
+
+                {{#if graficos.proyeccionCumplimiento}}
+                <div class="grafico-container">
+                    <img src="{{graficos.proyeccionCumplimiento}}" alt="Proyección de Cumplimiento">
+                    <p class="grafico-titulo">Figura 8: Proyección de cumplimiento hasta fin de período</p>
+                </div>
+                {{/if}}
+
+                <div class="dashboard-grid">
+                    <div class="dashboard-widget">
+                        <h4>Cumplirán Requisitos</h4>
+                        <div class="valor-principal text-success">{{predicciones.cumpliran}}</div>
+                        <div class="tendencia">{{predicciones.porcentajeCumpliran}}% del total</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>No Cumplirán</h4>
+                        <div class="valor-principal text-danger">{{predicciones.noCumpliran}}</div>
+                        <div class="tendencia">{{predicciones.porcentajeNoCumpliran}}% del total</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Incierto</h4>
+                        <div class="valor-principal text-warning">{{predicciones.incierto}}</div>
+                        <div class="tendencia">Requieren seguimiento</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Confianza de Predicción</h4>
+                        <div class="valor-principal">{{predicciones.confianza}}%</div>
+                        <div class="tendencia">Basado en datos históricos</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="subseccion">
+                <h3>5.2 Alertas Tempranas</h3>
+
+                {{#each alertasTempranas}}
+                <div class="alerta {{tipoAlerta}}">
+                    <span class="icono">{{icono}}</span>
+                    <div>
+                        <strong>{{titulo}}</strong>
+                        <br>{{descripcion}}
+                        <br><small>Probabilidad: {{probabilidad}}% | Impacto: {{impacto}}</small>
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </div>
+
+        <!-- SECCIÓN 6: RECOMENDACIONES Y PLANES DE ACCIÓN -->
+        <div class="seccion">
+            <h2>6. Recomendaciones y Planes de Acción</h2>
+
+            <div class="timeline">
+                <h3>Plan de Acción Prioritizado</h3>
+
+                {{#each planesAccion}}
+                <div class="timeline-item">
+                    <div class="timeline-fecha">{{plazo}}</div>
+                    <div class="timeline-contenido">
+                        <strong>{{accion}}</strong>
+                        <br>Responsable: {{responsable}}
+                        <br>Impacto esperado: {{impactoEsperado}}
+                        <br>KPI asociado: {{kpi}}
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+
+            <div class="insights mt-4">
+                <h3>💡 Insights Clave del Dashboard</h3>
+                <ul>
+                    {{#each insightsClave}}
+                    <li>
+                        <span class="icono">{{icono}}</span>
+                        <div class="contenido">
+                            <div class="titulo">{{titulo}}</div>
+                            <div class="descripcion">{{descripcion}}</div>
+                            {{#if recomendacion}}
+                            <div class="descripcion"><strong>Recomendación:</strong> {{recomendacion}}</div>
+                            {{/if}}
+                        </div>
+                    </li>
+                    {{/each}}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- PIE DE PÁGINA -->
+    <div class="page-footer">
+        <p>{{universidad}} - {{sistema}}</p>
+        <p>Dashboard de Cumplimiento y Rendimiento</p>
+        <p>Generado el {{fechaGeneracion}} a las {{horaGeneracion}}</p>
+        <p>Este documento contiene métricas sensibles del programa de becas</p>
+    </div>
+</body>
+</html>

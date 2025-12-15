@@ -1,0 +1,1270 @@
+const pdfGenerator = require('./pdfGenerator');
+const chartGenerator = require('./chartGenerator');
+const dataAggregator = require('./dataAggregator');
+const excelEnhanced = require('./excelEnhanced');
+const analytics = require('./analytics');
+const ApiError = require('../../utils/ApiError');
+const moment = require('moment');
+const path = require('path');
+
+class ReportesService {
+  /**
+   * Reporte 1: Informe Ejecutivo de Período Académico
+   * Reporte principal para directivos con vista 360° del programa de becas
+   */
+  async generarInformeEjecutivo(periodoAcademico = null, formato = 'pdf') {
+    try {
+      // Recopilar todos los datos necesarios
+      const [
+        kpis,
+        distribucionPostulaciones,
+        analisisBeneficiarios,
+        analisisAyudantias,
+        trendsData,
+        insights
+      ] = await Promise.all([
+        dataAggregator.getKPIs(periodoAcademico),
+        dataAggregator.getDistribucionPostulaciones({ periodoAcademico }),
+        dataAggregator.getAnalisisBeneficiarios(periodoAcademico),
+        dataAggregator.getAnalisisAyudantias(periodoAcademico),
+        this.obtenerDatosTendencias(periodoAcademico),
+        dataAggregator.generarInsights({}, 'general')
+      ]);
+
+      // Generar gráficos
+      const graficos = await this.generarGraficosEjecutivo({
+        distribucionPostulaciones,
+        analisisBeneficiarios,
+        analisisAyudantias,
+        trendsData
+      });
+
+      // Preparar datos para el reporte
+      const datosReporte = {
+        periodo: periodoAcademico || 'Todos los períodos',
+        fechaGeneracion: moment().format('DD [de] MMMM [de] YYYY'),
+        kpis,
+
+        // Sección 1: Postulaciones
+        postulaciones: {
+          total: distribucionPostulaciones.porEstado.reduce((sum, e) => sum + parseInt(e.cantidad), 0),
+          porEstado: distribucionPostulaciones.porEstado,
+          porTipoBeca: distribucionPostulaciones.porTipoBeca,
+          porTipoPostulante: distribucionPostulaciones.porTipoPostulante,
+          motivosRechazo: distribucionPostulaciones.motivosRechazo,
+          graficos: {
+            barrasEstado: graficos.postulacionesPorEstado,
+            pastelTipoBeca: graficos.distribucionTipoBeca,
+            tendencia30Dias: graficos.tendenciaPostulaciones
+          }
+        },
+
+        // Sección 2: Beneficiarios
+        beneficiarios: {
+          ...analisisBeneficiarios,
+          graficos: {
+            mapaCalor: graficos.mapaCalorBecas,
+            distribucionDepartamentos: graficos.distribucionDepartamentos
+          }
+        },
+
+        // Sección 3: Ayudantías
+        ayudantias: analisisAyudantias,
+
+        // Sección 4: Análisis Financiero
+        financiero: await this.generarAnalisisFinanciero(periodoAcademico),
+
+        // Sección 5: Insights y Recomendaciones
+        insights: this.formatearInsights(insights),
+
+        // Gráficos adicionales
+        graficos
+      };
+
+      // Generar según formato solicitado
+      if (formato === 'pdf') {
+        return await pdfGenerator.generatePDF('informe-ejecutivo', datosReporte, {
+          title: 'Informe Ejecutivo de Período Académico',
+          format: 'A4',
+          headerFooter: true
+        });
+      } else if (formato === 'excel') {
+        return await this.generarInformeEjecutivoExcel(datosReporte);
+      }
+
+      // Si es JSON, retornar datos crudos
+      return datosReporte;
+    } catch (error) {
+      console.error('Error generando informe ejecutivo:', error);
+      throw ApiError.internal('Error al generar informe ejecutivo: ' + error.message);
+    }
+  }
+
+  /**
+   * Reporte 2: Reporte Operativo de Supervisión
+   * Para coordinadores y jefes de departamento
+   */
+  async generarReporteOperativoSupervision(filtros = {}, formato = 'pdf') {
+    try {
+      const { periodoAcademico, departamento, supervisorId } = filtros;
+
+      // Obtener datos de supervisión
+      const whereRiesgo = {};
+      if (periodoAcademico) whereRiesgo.periodoInicio = periodoAcademico;
+
+      const [
+        supervisoresData,
+        cargaTrabajo,
+        estudiantesEnRiesgo,
+        reportesPendientes,
+        plazasAnalisis,
+        rendimientoSupervisores
+      ] = await Promise.all([
+        this.obtenerDatosSupervisores(supervisorId),
+        this.analizarCargaTrabajo(supervisorId),
+        dataAggregator.identificarEstudiantesEnRiesgoDetallado(whereRiesgo),
+        this.obtenerReportesPendientesRevision(supervisorId),
+        this.analizarPlazas(departamento, periodoAcademico),
+        this.evaluarRendimientoSupervisores(supervisorId, periodoAcademico)
+      ]);
+
+      // Generar gráficos operativos
+      const graficos = await this.generarGraficosOperativos({
+        cargaTrabajo,
+        rendimientoSupervisores,
+        plazasAnalisis
+      });
+
+      const datosReporte = {
+        periodo: periodoAcademico || 'Período actual',
+        fechaGeneracion: moment().format('DD [de] MMMM [de] YYYY'),
+
+        // Resumen de supervisión
+        resumen: {
+          totalSupervisores: supervisoresData.length,
+          totalAyudantesSupervisionados: cargaTrabajo.totalAyudantes,
+          cargaPromedio: cargaTrabajo.promedioAyudantesPorSupervisor,
+          alertasSobrecarga: cargaTrabajo.supervisoresSobrecargados
+        },
+
+        // Desempeño por supervisor
+        supervisores: supervisoresData.map(s => ({
+          ...s,
+          eficiencia: this.calcularEficienciaSupervisor(s),
+          semaforo: this.determinarSemaforoSupervisor(s)
+        })),
+
+        // Estudiantes requiriendo atención
+        estudiantesEnRiesgo: estudiantesEnRiesgo.map(e => ({
+          ...e,
+          nivelUrgencia: this.calcularNivelUrgencia(e),
+          accionRecomendada: this.generarAccionRecomendada(e)
+        })),
+
+        // Reportes pendientes
+        reportesPendientes: {
+          total: reportesPendientes.length,
+          criticos: reportesPendientes.filter(r => r.diasPendiente > 7),
+          porSupervisor: this.agruparPorSupervisor(reportesPendientes)
+        },
+
+        // Análisis de plazas
+        plazas: {
+          masProductivas: plazasAnalisis.topProductivas,
+          mayorCumplimiento: plazasAnalisis.mejorCumplimiento,
+          vacantesVsOcupadas: plazasAnalisis.ocupacion,
+          recomendaciones: plazasAnalisis.recomendaciones
+        },
+
+        graficos
+      };
+
+      // Generar formato solicitado
+      if (formato === 'pdf') {
+        return await pdfGenerator.generatePDF('operativo-supervision', datosReporte, {
+          title: 'Reporte Operativo de Supervisión'
+        });
+      } else if (formato === 'excel') {
+        return await this.generarReporteOperativoExcel(datosReporte);
+      }
+
+      return datosReporte;
+    } catch (error) {
+      console.error('Error generando reporte operativo:', error);
+      throw ApiError.internal('Error al generar reporte operativo: ' + error.message);
+    }
+  }
+
+  /**
+   * Reporte 3: Dashboard de Cumplimiento y Rendimiento
+   * Vista rápida del estado actual del sistema
+   */
+  async generarDashboardCumplimiento(filtros = {}, formato = 'pdf') {
+    try {
+      const { periodoAcademico, actualizacionTiempoReal } = filtros;
+
+      // Métricas en tiempo real
+      const [
+        metricasActuales,
+        alertasActivas,
+        tendenciasSemanales,
+        topPerformers,
+        bottomPerformers,
+        estadoSistema
+      ] = await Promise.all([
+        this.obtenerMetricasRealTime(),
+        dataAggregator.getAlertas({ periodoAcademico }),
+        this.obtenerTendenciasSemanales(),
+        this.obtenerTopPerformers(10),
+        this.obtenerBottomPerformers(10),
+        this.evaluarEstadoSistema()
+      ]);
+
+      // Generar visualizaciones de dashboard
+      const visualizaciones = await this.generarVisualizacionesDashboard({
+        metricasActuales,
+        tendenciasSemanales,
+        estadoSistema
+      });
+
+      const datosReporte = {
+        titulo: 'Dashboard de Cumplimiento y Rendimiento',
+        actualizacion: moment().format('DD/MM/YYYY HH:mm:ss'),
+
+        // Widgets principales (KPIs con semáforos)
+        widgets: {
+          postulacionesEnRevision: {
+            valor: metricasActuales.postulaciones.enRevision,
+            cambio: metricasActuales.postulaciones.cambioDesdeAyer,
+            semaforo: this.calcularSemaforoDashboard(metricasActuales.postulaciones.enRevision, 20, 50)
+          },
+          beneficiariosActivos: {
+            valor: metricasActuales.beneficiarios.activos,
+            cambio: 0,
+            semaforo: 'verde'
+          },
+          reportesPendientes: {
+            valor: metricasActuales.reportes.pendientes,
+            cambio: metricasActuales.reportes.cambioDesdeAyer,
+            semaforo: this.calcularSemaforoDashboard(metricasActuales.reportes.pendientes, 10, 30)
+          },
+          tasaCumplimiento: {
+            valor: metricasActuales.cumplimiento.tasaGeneral + '%',
+            cambio: metricasActuales.cumplimiento.cambioSemanal,
+            semaforo: this.calcularSemaforoMetrica(metricasActuales.cumplimiento.tasaGeneral, 70, 85)
+          }
+        },
+
+        // Alertas y notificaciones
+        alertas: this.priorizarAlertas(alertasActivas),
+
+        // Gráficos de tendencias
+        tendencias: {
+          ultimos7Dias: tendenciasSemanales,
+          graficos: visualizaciones.tendencias
+        },
+
+        // Rankings
+        rankings: {
+          top10: topPerformers,
+          bottom10: bottomPerformers,
+          requierenApoyo: bottomPerformers.filter(p => p.porcentajeCumplimiento < 50)
+        },
+
+        // Estado general del sistema
+        estadoSistema: {
+          ...estadoSistema,
+          salud: this.calcularSaludSistema(estadoSistema),
+          recomendacionesRapidas: this.generarRecomendacionesRapidas(estadoSistema)
+        },
+
+        visualizaciones
+      };
+
+      // Formato de salida
+      if (formato === 'pdf') {
+        return await pdfGenerator.generatePDF('dashboard-cumplimiento', datosReporte, {
+          title: 'Dashboard de Cumplimiento',
+          format: 'A4',
+          orientation: 'landscape' // Horizontal para mejor visualización
+        });
+      } else if (formato === 'excel') {
+        return await this.generarDashboardExcel(datosReporte);
+      }
+
+      return datosReporte;
+    } catch (error) {
+      console.error('Error generando dashboard:', error);
+      throw ApiError.internal('Error al generar dashboard: ' + error.message);
+    }
+  }
+
+  /**
+   * Reporte 4: Análisis Predictivo y Planificación
+   * Para planificación estratégica y presupuestaria
+   */
+  async generarAnalisisPredictivo(filtros = {}, formato = 'pdf') {
+    try {
+      const { periodosAnalizar = 5, incluirProyecciones = 3 } = filtros;
+
+      // Obtener períodos históricos
+      const periodosHistoricos = await this.obtenerPeriodosHistoricos(periodosAnalizar);
+
+      // Análisis predictivo completo
+      const analisisPredictivo = await analytics.analyzeAndPredict(
+        periodosHistoricos,
+        filtros.tipoBeca
+      );
+
+      // Análisis presupuestario
+      const analisisPresupuestario = await this.generarAnalisisPresupuestario(
+        analisisPredictivo.proyecciones,
+        periodosHistoricos
+      );
+
+      // Análisis de capacidad
+      const analisisCapacidad = await this.analizarCapacidadSistema(
+        analisisPredictivo.proyecciones,
+        analisisPredictivo.historico
+      );
+
+      // Generar gráficos predictivos
+      const graficos = await this.generarGraficosPredictivos({
+        historico: analisisPredictivo.historico,
+        proyecciones: analisisPredictivo.proyecciones,
+        tendencias: analisisPredictivo.tendencias
+      });
+
+      const datosReporte = {
+        titulo: 'Análisis Predictivo y Planificación Estratégica',
+        fechaGeneracion: moment().format('DD [de] MMMM [de] YYYY'),
+        periodosAnalizados: periodosHistoricos,
+
+        // Sección 1: Análisis Histórico
+        historico: {
+          resumen: this.resumirHistorico(analisisPredictivo.historico),
+          tendencias: analisisPredictivo.tendencias,
+          estacionalidad: analisisPredictivo.estacionalidad,
+          correlaciones: analisisPredictivo.correlaciones,
+          graficos: {
+            evolucionMetricas: graficos.evolucionHistorica,
+            tendenciasLineales: graficos.tendencias
+          }
+        },
+
+        // Sección 2: Proyecciones
+        proyecciones: {
+          ...analisisPredictivo.proyecciones,
+          graficos: {
+            proyeccionPostulaciones: graficos.proyeccionPostulaciones,
+            proyeccionBeneficiarios: graficos.proyeccionBeneficiarios,
+            intervalosConfianza: graficos.intervalosConfianza
+          }
+        },
+
+        // Sección 3: Análisis de Eficiencia
+        eficiencia: {
+          departamentosOptimos: await this.identificarDepartamentosOptimos(),
+          supervisoresEficientes: await this.identificarSupervisoresEficientes(),
+          plazasEfectivas: await this.identificarPlazasEfectivas(),
+          recomendacionesOptimizacion: this.generarRecomendacionesOptimizacion(analisisPredictivo)
+        },
+
+        // Sección 4: Análisis Presupuestario
+        presupuesto: {
+          ...analisisPresupuestario,
+          graficos: {
+            proyeccionCostos: graficos.proyeccionCostos,
+            distribucionPresupuesto: graficos.distribucionPresupuesto
+          }
+        },
+
+        // Sección 5: Análisis de Capacidad
+        capacidad: {
+          ...analisisCapacidad,
+          recursosRequeridos: this.calcularRecursosRequeridos(analisisPredictivo.proyecciones),
+          expansionRecomendada: this.planificarExpansion(analisisCapacidad)
+        },
+
+        // Sección 6: Riesgos
+        riesgos: analisisPredictivo.riesgos,
+
+        // Sección 7: Recomendaciones Estratégicas
+        recomendaciones: {
+          inmediatas: analisisPredictivo.recomendaciones.filter(r => r.prioridad === 'critica'),
+          cortoPlazo: analisisPredictivo.recomendaciones.filter(r => r.prioridad === 'alta'),
+          medianoPlazo: analisisPredictivo.recomendaciones.filter(r => r.prioridad === 'media'),
+          estrategicas: this.generarRecomendacionesEstrategicas(analisisPredictivo)
+        },
+
+        graficos
+      };
+
+      // Formato de salida
+      if (formato === 'pdf') {
+        return await pdfGenerator.generatePDF('analisis-predictivo', datosReporte, {
+          title: 'Análisis Predictivo y Planificación'
+        });
+      } else if (formato === 'excel') {
+        return await this.generarAnalisisPredictivoExcel(datosReporte);
+      }
+
+      return datosReporte;
+    } catch (error) {
+      console.error('Error generando análisis predictivo:', error);
+      throw ApiError.internal('Error al generar análisis predictivo: ' + error.message);
+    }
+  }
+
+  // ========== MÉTODOS AUXILIARES PARA GRÁFICOS ==========
+
+  async generarGraficosEjecutivo(datos) {
+    const graficos = await chartGenerator.generateBatchCharts([
+      {
+        name: 'postulacionesPorEstado',
+        type: 'bar',
+        data: {
+          labels: datos.distribucionPostulaciones.porEstado.map(e => e.estado),
+          datasets: [{
+            label: 'Postulaciones',
+            data: datos.distribucionPostulaciones.porEstado.map(e => e.cantidad)
+          }]
+        },
+        options: {
+          title: 'Postulaciones por Estado'
+        }
+      },
+      {
+        name: 'distribucionTipoBeca',
+        type: 'pie',
+        data: {
+          labels: datos.distribucionPostulaciones.porTipoBeca.map(t => t.tipoBeca),
+          dataset: {
+            data: datos.distribucionPostulaciones.porTipoBeca.map(t => t.cantidad)
+          }
+        },
+        options: {
+          title: 'Distribución por Tipo de Beca',
+          doughnut: true
+        }
+      },
+      {
+        name: 'mapaCalorBecas',
+        type: 'heatmap',
+        data: datos.analisisBeneficiarios.mapaCalor,
+        options: {
+          title: 'Distribución de Becas por Carrera'
+        }
+      },
+      {
+        name: 'distribucionDepartamentos',
+        type: 'bar',
+        data: {
+          labels: Object.keys(datos.analisisAyudantias.porDepartamento || {}),
+          datasets: [{
+            label: 'Ayudantes por Departamento',
+            data: Object.values(datos.analisisAyudantias.porDepartamento || {}).map(d => d.cantidad || 0)
+          }]
+        },
+        options: {
+          title: 'Distribución por Departamento',
+          horizontal: true
+        }
+      }
+    ]);
+
+    // Convertir array a objeto para fácil acceso
+    const graficosObj = {};
+    graficos.forEach(g => {
+      graficosObj[g.name] = g.image;
+    });
+
+    return graficosObj;
+  }
+
+  async generarGraficosOperativos(datos) {
+    const graficos = await chartGenerator.generateBatchCharts([
+      {
+        name: 'cargaTrabajo',
+        type: 'bar',
+        data: {
+          labels: datos.cargaTrabajo.supervisores.map(s => s.nombre),
+          datasets: [{
+            label: 'Ayudantes Asignados',
+            data: datos.cargaTrabajo.supervisores.map(s => s.cantidadAyudantes)
+          }]
+        },
+        options: {
+          title: 'Carga de Trabajo por Supervisor',
+          horizontal: true
+        }
+      },
+      {
+        name: 'rendimientoSupervisores',
+        type: 'radar',
+        data: {
+          labels: ['Puntualidad', 'Calidad', 'Respuesta', 'Satisfacción', 'Eficiencia'],
+          datasets: datos.rendimientoSupervisores.slice(0, 5).map(s => ({
+            label: s.nombre,
+            data: [
+              s.metricas.puntualidad,
+              s.metricas.calidad,
+              s.metricas.tiempoRespuesta,
+              s.metricas.satisfaccion,
+              s.metricas.eficiencia
+            ]
+          }))
+        },
+        options: {
+          title: 'Comparación de Rendimiento'
+        }
+      },
+      {
+        name: 'ocupacionPlazas',
+        type: 'progress',
+        data: {
+          labels: datos.plazasAnalisis.topProductivas.slice(0, 10).map(p => p.nombre),
+          values: datos.plazasAnalisis.topProductivas.slice(0, 10).map(p => p.porcentajeOcupacion)
+        },
+        options: {
+          title: 'Ocupación de Plazas Top'
+        }
+      }
+    ]);
+
+    const graficosObj = {};
+    graficos.forEach(g => {
+      graficosObj[g.name] = g.image;
+    });
+
+    return graficosObj;
+  }
+
+  async generarVisualizacionesDashboard(datos) {
+    const visualizaciones = await chartGenerator.generateBatchCharts([
+      {
+        name: 'tendenciaPostulaciones',
+        type: 'line',
+        data: {
+          labels: datos.tendenciasSemanales.dias,
+          datasets: [{
+            label: 'Postulaciones',
+            data: datos.tendenciasSemanales.postulaciones
+          }]
+        },
+        options: {
+          title: 'Tendencia Últimos 7 Días',
+          smooth: true,
+          fillArea: true
+        }
+      },
+      {
+        name: 'semaforoSistema',
+        type: 'gauge',
+        value: datos.estadoSistema.saludGeneral,
+        options: {
+          max: 100,
+          title: 'Salud del Sistema',
+          label: 'puntos'
+        }
+      },
+      {
+        name: 'distribucionAlertas',
+        type: 'pie',
+        data: {
+          labels: ['Críticas', 'Altas', 'Medias', 'Bajas'],
+          dataset: {
+            data: [
+              datos.metricasActuales.alertas.criticas,
+              datos.metricasActuales.alertas.altas,
+              datos.metricasActuales.alertas.medias,
+              datos.metricasActuales.alertas.bajas
+            ]
+          }
+        },
+        options: {
+          title: 'Distribución de Alertas'
+        }
+      }
+    ]);
+
+    const visualizacionesObj = {};
+    visualizaciones.forEach(v => {
+      visualizacionesObj[v.name] = v.image;
+    });
+
+    return visualizacionesObj;
+  }
+
+  async generarGraficosPredictivos(datos) {
+    const graficos = await chartGenerator.generateBatchCharts([
+      {
+        name: 'evolucionHistorica',
+        type: 'mixed',
+        data: {
+          labels: datos.historico.map(h => h.periodo),
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Postulaciones',
+              data: datos.historico.map(h => h.metricas.postulaciones.total),
+              yAxisID: 'y'
+            },
+            {
+              type: 'line',
+              label: 'Tasa Aprobación %',
+              data: datos.historico.map(h => h.metricas.postulaciones.tasaAprobacion),
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          title: 'Evolución Histórica',
+          dualAxis: true
+        }
+      },
+      {
+        name: 'proyeccionPostulaciones',
+        type: 'line',
+        data: {
+          labels: [
+            ...datos.historico.map(h => h.periodo),
+            ...datos.proyecciones.proyeccionBase.map(p => p.periodo)
+          ],
+          datasets: [
+            {
+              label: 'Histórico',
+              data: [
+                ...datos.historico.map(h => h.metricas.postulaciones.total),
+                ...Array(datos.proyecciones.proyeccionBase.length).fill(null)
+              ]
+            },
+            {
+              label: 'Proyección',
+              data: [
+                ...Array(datos.historico.length - 1).fill(null),
+                datos.historico[datos.historico.length - 1].metricas.postulaciones.total,
+                ...datos.proyecciones.proyeccionBase.map(p => p.postulaciones.estimado)
+              ]
+            }
+          ]
+        },
+        options: {
+          title: 'Proyección de Postulaciones'
+        }
+      }
+    ]);
+
+    const graficosObj = {};
+    graficos.forEach(g => {
+      graficosObj[g.name] = g.image;
+    });
+
+    return graficosObj;
+  }
+
+  // ========== MÉTODOS DE EXPORTACIÓN A EXCEL ==========
+
+  async generarInformeEjecutivoExcel(datos) {
+    return await excelEnhanced.createDashboard({
+      metadata: {
+        title: 'Informe Ejecutivo de Período Académico',
+        subject: 'Análisis completo del programa de becas',
+        periodoAcademico: datos.periodo
+      },
+      includeIndex: true,
+      sheets: [
+        { name: 'Resumen Ejecutivo', sheetName: 'Resumen', description: 'KPIs y métricas principales' },
+        { name: 'Postulaciones', sheetName: 'Postulaciones', description: 'Análisis de postulaciones' },
+        { name: 'Beneficiarios', sheetName: 'Beneficiarios', description: 'Listado y análisis de beneficiarios' },
+        { name: 'Ayudantías', sheetName: 'Ayudantias', description: 'Análisis del programa de ayudantías' },
+        { name: 'Análisis Financiero', sheetName: 'Financiero', description: 'Proyecciones y costos' }
+      ],
+      resumenEjecutivo: {
+        kpis: datos.kpis,
+        resumenTabla: this.prepararTablaResumen(datos)
+      },
+      dataSheets: [
+        {
+          name: 'Postulaciones',
+          data: {
+            headers: [
+              { label: 'Estado', key: 'estado', type: 'text' },
+              { label: 'Cantidad', key: 'cantidad', type: 'number' },
+              { label: 'Porcentaje', key: 'porcentaje', type: 'percent' }
+            ],
+            rows: datos.postulaciones.porEstado.map(e => ({
+              estado: e.estado,
+              cantidad: e.cantidad,
+              porcentaje: e.cantidad / datos.postulaciones.total
+            }))
+          },
+          options: {
+            title: 'Distribución de Postulaciones por Estado',
+            autoFilter: true,
+            freezePanes: true
+          }
+        },
+        {
+          name: 'Beneficiarios',
+          data: {
+            headers: [
+              { label: 'Nombre', key: 'nombre', type: 'text', width: 25 },
+              { label: 'Email', key: 'email', type: 'text', width: 30 },
+              { label: 'Cédula', key: 'cedula', type: 'text', width: 15 },
+              { label: 'Tipo Beca', key: 'tipoBeca', type: 'text', width: 20 },
+              { label: 'Progreso', key: 'progreso', type: 'percent', width: 15 },
+              { label: 'Estado', key: 'estado', type: 'text', width: 15,
+                conditional: [
+                  { operator: '==', value: 'Activa', backgroundColor: 'FF10B981', fontColor: 'FFFFFFFF' },
+                  { operator: '==', value: 'Suspendida', backgroundColor: 'FFF59E0B', fontColor: 'FF000000' },
+                  { operator: '==', value: 'Cancelada', backgroundColor: 'FFEF4444', fontColor: 'FFFFFFFF' }
+                ]
+              }
+            ],
+            rows: datos.beneficiarios.topBeneficiarios || []
+          },
+          options: {
+            title: 'Listado de Beneficiarios',
+            autoFilter: true,
+            freezeColumns: 1
+          }
+        }
+      ],
+      chartSheets: [
+        {
+          name: 'Análisis Gráfico',
+          data: {
+            labels: datos.postulaciones.porTipoBeca.map(t => t.tipoBeca),
+            datasets: [{
+              label: 'Distribución por Tipo de Beca',
+              data: datos.postulaciones.porTipoBeca.map(t => t.cantidad)
+            }]
+          },
+          options: {
+            title: 'Análisis Visual de Datos',
+            sparklines: true,
+            statistics: true,
+            dataBars: true
+          }
+        }
+      ]
+    });
+  }
+
+  async generarReporteOperativoExcel(datos) {
+    return await excelEnhanced.createDashboard({
+      metadata: {
+        title: 'Reporte Operativo de Supervisión',
+        subject: 'Análisis de supervisión y gestión'
+      },
+      dataSheets: [
+        {
+          name: 'Supervisores',
+          data: {
+            headers: [
+              { label: 'Supervisor', key: 'nombre', type: 'text', width: 25 },
+              { label: 'Ayudantes', key: 'cantidadAyudantes', type: 'number' },
+              { label: 'Eficiencia', key: 'eficiencia', type: 'percent' },
+              { label: 'Estado', key: 'semaforo', type: 'text' }
+            ],
+            rows: datos.supervisores
+          },
+          options: {
+            title: 'Análisis de Supervisores'
+          }
+        },
+        {
+          name: 'Estudiantes en Riesgo',
+          data: {
+            headers: [
+              { label: 'Estudiante', key: 'nombre', type: 'text' },
+              { label: 'Email', key: 'email', type: 'text' },
+              { label: 'Progreso', key: 'porcentajeCompletado', type: 'percent' },
+              { label: 'Horas Restantes', key: 'horasRestantes', type: 'number' },
+              { label: 'Nivel Riesgo', key: 'nivelRiesgo', type: 'text' },
+              { label: 'Acción Recomendada', key: 'accionRecomendada', type: 'text' }
+            ],
+            rows: datos.estudiantesEnRiesgo
+          },
+          options: {
+            title: 'Estudiantes Requiriendo Atención',
+            autoFilter: true,
+            conditional: true
+          }
+        }
+      ]
+    });
+  }
+
+  async generarDashboardExcel(datos) {
+    return await excelEnhanced.createDashboard({
+      metadata: {
+        title: 'Dashboard de Cumplimiento',
+        subject: 'Vista en tiempo real del sistema'
+      },
+      resumenEjecutivo: {
+        kpis: Object.entries(datos.widgets).map(([key, widget]) => ({
+          nombre: key.replace(/([A-Z])/g, ' $1').trim(),
+          valor: widget.valor,
+          cambio: widget.cambio,
+          semaforo: widget.semaforo
+        }))
+      },
+      dataSheets: [
+        {
+          name: 'Top Performers',
+          data: {
+            headers: [
+              { label: 'Posición', key: 'posicion', type: 'number' },
+              { label: 'Nombre', key: 'nombre', type: 'text' },
+              { label: 'Email', key: 'email', type: 'text' },
+              { label: 'Progreso', key: 'porcentajeCumplimiento', type: 'percent' }
+            ],
+            rows: datos.rankings.top10.map((p, i) => ({ ...p, posicion: i + 1 }))
+          },
+          options: {
+            title: 'Top 10 Mejores Desempeños'
+          }
+        }
+      ]
+    });
+  }
+
+  async generarAnalisisPredictivoExcel(datos) {
+    return await excelEnhanced.createDashboard({
+      metadata: {
+        title: 'Análisis Predictivo y Planificación',
+        subject: 'Proyecciones y análisis estratégico'
+      },
+      dataSheets: [
+        {
+          name: 'Proyecciones',
+          data: {
+            headers: [
+              { label: 'Período', key: 'periodo', type: 'text' },
+              { label: 'Postulaciones Est.', key: 'postulacionesEst', type: 'number' },
+              { label: 'Post. Mín', key: 'postulacionesMin', type: 'number' },
+              { label: 'Post. Máx', key: 'postulacionesMax', type: 'number' },
+              { label: 'Beneficiarios Est.', key: 'beneficiariosEst', type: 'number' },
+              { label: 'Confianza', key: 'confianza', type: 'text' }
+            ],
+            rows: datos.proyecciones.proyeccionBase.map(p => ({
+              periodo: p.periodo,
+              postulacionesEst: p.postulaciones.estimado,
+              postulacionesMin: p.postulaciones.minimo,
+              postulacionesMax: p.postulaciones.maximo,
+              beneficiariosEst: p.beneficiarios.estimado,
+              confianza: p.confianza
+            }))
+          },
+          options: {
+            title: 'Proyecciones para Próximos Períodos'
+          }
+        },
+        {
+          name: 'Análisis de Riesgos',
+          data: {
+            headers: [
+              { label: 'Tipo', key: 'tipo', type: 'text' },
+              { label: 'Severidad', key: 'severidad', type: 'text' },
+              { label: 'Descripción', key: 'descripcion', type: 'text', width: 40 },
+              { label: 'Impacto', key: 'impacto', type: 'text', width: 30 },
+              { label: 'Mitigación', key: 'mitigacion', type: 'text', width: 40 }
+            ],
+            rows: datos.riesgos.riesgos
+          },
+          options: {
+            title: 'Matriz de Riesgos Identificados'
+          }
+        }
+      ]
+    });
+  }
+
+  // ========== MÉTODOS AUXILIARES DE DATOS ==========
+
+  async obtenerDatosTendencias(periodoAcademico) {
+    // Implementación simplificada - obtener tendencias de los últimos 30 días
+    return {
+      dias: Array.from({ length: 30 }, (_, i) => moment().subtract(29 - i, 'days').format('DD/MM')),
+      postulaciones: Array.from({ length: 30 }, () => Math.floor(Math.random() * 20) + 5),
+      beneficiarios: Array.from({ length: 30 }, () => Math.floor(Math.random() * 10) + 2)
+    };
+  }
+
+  async generarAnalisisFinanciero(periodoAcademico) {
+    // Análisis financiero simplificado
+    return {
+      inversionTotal: 150000,
+      distribucionPorPrograma: {
+        'Ayudantía': 60000,
+        'Impacto': 40000,
+        'Excelencia': 30000,
+        'Exoneración': 20000
+      },
+      costoPromedioPorBeneficiario: 1500,
+      proyeccionProximoPeriodo: 165000,
+      ahorrosGenerados: 15000
+    };
+  }
+
+  formatearInsights(insights) {
+    return insights.map(insight => ({
+      ...insight,
+      icono: this.obtenerIconoInsight(insight.tipo),
+      color: this.obtenerColorInsight(insight.tipo)
+    }));
+  }
+
+  async obtenerDatosSupervisores(supervisorId) {
+    // Implementación simplificada
+    return [
+      {
+        id: '1',
+        nombre: 'Dr. García',
+        email: 'garcia@unimet.edu.ve',
+        cantidadAyudantes: 8,
+        reportesRevisados: 45,
+        reportesAprobados: 42,
+        tiempoPromedioRespuesta: 2.5,
+        tasaSatisfaccion: 92
+      }
+    ];
+  }
+
+  async analizarCargaTrabajo(supervisorId) {
+    return {
+      totalAyudantes: 45,
+      promedioAyudantesPorSupervisor: 7.5,
+      supervisoresSobrecargados: 2,
+      supervisores: []
+    };
+  }
+
+  async obtenerReportesPendientesRevision(supervisorId) {
+    return [];
+  }
+
+  async analizarPlazas(departamento, periodoAcademico) {
+    return {
+      topProductivas: [
+        { nombre: 'Programación I', codigo: 'COMP101', porcentajeOcupacion: 95 }
+      ],
+      mejorCumplimiento: [],
+      ocupacion: { ocupadas: 40, totales: 50 },
+      recomendaciones: ['Expandir plazas en Computación']
+    };
+  }
+
+  async evaluarRendimientoSupervisores(supervisorId, periodoAcademico) {
+    return [
+      {
+        nombre: 'Dr. García',
+        metricas: {
+          puntualidad: 95,
+          calidad: 88,
+          tiempoRespuesta: 92,
+          satisfaccion: 90,
+          eficiencia: 91
+        }
+      }
+    ];
+  }
+
+  calcularEficienciaSupervisor(supervisor) {
+    const tasaAprobacion = supervisor.reportesRevisados > 0
+      ? (supervisor.reportesAprobados / supervisor.reportesRevisados) * 100
+      : 0;
+    const rapidezRespuesta = Math.max(0, 100 - (supervisor.tiempoPromedioRespuesta * 10));
+    return ((tasaAprobacion + rapidezRespuesta + supervisor.tasaSatisfaccion) / 3).toFixed(1);
+  }
+
+  determinarSemaforoSupervisor(supervisor) {
+    const eficiencia = this.calcularEficienciaSupervisor(supervisor);
+    if (eficiencia >= 85) return 'verde';
+    if (eficiencia >= 70) return 'amarillo';
+    return 'rojo';
+  }
+
+  calcularNivelUrgencia(estudiante) {
+    if (estudiante.porcentajeCompletado < 30) return 'critico';
+    if (estudiante.porcentajeCompletado < 50) return 'alto';
+    if (estudiante.porcentajeCompletado < 70) return 'medio';
+    return 'bajo';
+  }
+
+  generarAccionRecomendada(estudiante) {
+    const nivel = this.calcularNivelUrgencia(estudiante);
+    switch (nivel) {
+      case 'critico':
+        return 'Intervención inmediata requerida - Reunión urgente con supervisor';
+      case 'alto':
+        return 'Programar sesión de apoyo esta semana';
+      case 'medio':
+        return 'Monitoreo cercano y recordatorio de plazos';
+      default:
+        return 'Seguimiento regular';
+    }
+  }
+
+  agruparPorSupervisor(reportes) {
+    const agrupados = {};
+    reportes.forEach(r => {
+      if (!agrupados[r.supervisorId]) {
+        agrupados[r.supervisorId] = [];
+      }
+      agrupados[r.supervisorId].push(r);
+    });
+    return agrupados;
+  }
+
+  async obtenerMetricasRealTime() {
+    return {
+      postulaciones: {
+        enRevision: 12,
+        cambioDesdeAyer: 3
+      },
+      beneficiarios: {
+        activos: 156
+      },
+      reportes: {
+        pendientes: 23,
+        cambioDesdeAyer: -2
+      },
+      cumplimiento: {
+        tasaGeneral: 78.5,
+        cambioSemanal: 2.3
+      },
+      alertas: {
+        criticas: 2,
+        altas: 5,
+        medias: 8,
+        bajas: 12
+      }
+    };
+  }
+
+  async obtenerTendenciasSemanales() {
+    return {
+      dias: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+      postulaciones: [12, 15, 18, 14, 20, 8, 5],
+      reportes: [45, 52, 48, 50, 55, 20, 10],
+      horas: [120, 135, 125, 140, 145, 60, 30]
+    };
+  }
+
+  async obtenerTopPerformers(limite = 10) {
+    return Array.from({ length: limite }, (_, i) => ({
+      nombre: `Estudiante Top ${i + 1}`,
+      email: `top${i + 1}@unimet.edu.ve`,
+      porcentajeCumplimiento: 95 - i * 2
+    }));
+  }
+
+  async obtenerBottomPerformers(limite = 10) {
+    return Array.from({ length: limite }, (_, i) => ({
+      nombre: `Estudiante Riesgo ${i + 1}`,
+      email: `riesgo${i + 1}@unimet.edu.ve`,
+      porcentajeCumplimiento: 45 - i * 3
+    }));
+  }
+
+  async evaluarEstadoSistema() {
+    return {
+      saludGeneral: 85,
+      componentesOperativos: 12,
+      componentesConAdvertencia: 2,
+      componentesCriticos: 0
+    };
+  }
+
+  calcularSemaforoDashboard(valor, umbralAmarillo, umbralRojo) {
+    if (valor <= umbralAmarillo) return 'verde';
+    if (valor <= umbralRojo) return 'amarillo';
+    return 'rojo';
+  }
+
+  calcularSemaforoMetrica(valor, umbralRojo, umbralVerde) {
+    if (valor >= umbralVerde) return 'verde';
+    if (valor >= umbralRojo) return 'amarillo';
+    return 'rojo';
+  }
+
+  priorizarAlertas(alertas) {
+    // Validar que alertas sea un array válido
+    if (!alertas || !Array.isArray(alertas) || alertas.length === 0) {
+      return [];
+    }
+
+    return alertas
+      .sort((a, b) => {
+        const prioridad = { critica: 0, alta: 1, media: 2, baja: 3 };
+        return prioridad[a.prioridad] - prioridad[b.prioridad];
+      })
+      .slice(0, 10);
+  }
+
+  calcularSaludSistema(estadoSistema) {
+    let salud = 100;
+    salud -= estadoSistema.componentesCriticos * 20;
+    salud -= estadoSistema.componentesConAdvertencia * 5;
+    return Math.max(0, salud);
+  }
+
+  generarRecomendacionesRapidas(estadoSistema) {
+    const recomendaciones = [];
+    if (estadoSistema.componentesCriticos > 0) {
+      recomendaciones.push('Atender componentes críticos inmediatamente');
+    }
+    if (estadoSistema.componentesConAdvertencia > 3) {
+      recomendaciones.push('Revisar componentes con advertencia');
+    }
+    return recomendaciones;
+  }
+
+  async obtenerPeriodosHistoricos(cantidad) {
+    // Generar períodos históricos
+    const periodos = [];
+    const añoActual = moment().year();
+    let año = añoActual;
+    let trimestre = parseInt(moment().quarter());
+
+    for (let i = 0; i < cantidad; i++) {
+      periodos.unshift(`${año}-${trimestre}`);
+      trimestre--;
+      if (trimestre < 1) {
+        trimestre = 3;
+        año--;
+      }
+    }
+
+    return periodos;
+  }
+
+  async generarAnalisisPresupuestario(proyecciones, historico) {
+    return {
+      presupuestoActual: 500000,
+      presupuestoProyectado: 550000,
+      incrementoRequerido: 50000,
+      justificacion: 'Crecimiento proyectado del 10% en beneficiarios'
+    };
+  }
+
+  async analizarCapacidadSistema(proyecciones, historico) {
+    return {
+      capacidadActual: 200,
+      capacidadRequerida: 250,
+      breachCapacidad: false
+    };
+  }
+
+  resumirHistorico(historico) {
+    return {
+      periodosAnalizados: historico.length,
+      promedioPostulaciones: historico.reduce((sum, h) => sum + h.metricas.postulaciones.total, 0) / historico.length,
+      promedioBeneficiarios: historico.reduce((sum, h) => sum + h.metricas.beneficiarios.total, 0) / historico.length
+    };
+  }
+
+  async identificarDepartamentosOptimos() {
+    return [
+      { departamento: 'Computación', eficiencia: 92 },
+      { departamento: 'Administración', eficiencia: 88 }
+    ];
+  }
+
+  async identificarSupervisoresEficientes() {
+    return [
+      { nombre: 'Dr. García', eficiencia: 95 },
+      { nombre: 'Ing. Silva', eficiencia: 92 }
+    ];
+  }
+
+  async identificarPlazasEfectivas() {
+    return [
+      { plaza: 'Programación I', efectividad: 94 },
+      { plaza: 'Base de Datos', efectividad: 91 }
+    ];
+  }
+
+  generarRecomendacionesOptimizacion(analisisPredictivo) {
+    return [
+      'Implementar automatización en procesos repetitivos',
+      'Optimizar asignación de supervisores',
+      'Revisar criterios de evaluación'
+    ];
+  }
+
+  calcularRecursosRequeridos(proyecciones) {
+    return {
+      supervisoresAdicionales: 3,
+      evaluadoresAdicionales: 2,
+      presupuestoAdicional: 50000
+    };
+  }
+
+  planificarExpansion(analisisCapacidad) {
+    return {
+      fasesExpansion: 3,
+      tiempoEstimado: '6 meses',
+      inversionRequerida: 100000
+    };
+  }
+
+  generarRecomendacionesEstrategicas(analisisPredictivo) {
+    return [
+      {
+        area: 'Expansión',
+        recomendacion: 'Aumentar capacidad en 25% para próximo año',
+        justificacion: 'Crecimiento sostenido de demanda'
+      },
+      {
+        area: 'Eficiencia',
+        recomendacion: 'Implementar sistema de pre-evaluación automatizada',
+        justificacion: 'Reducir tiempo de evaluación en 40%'
+      }
+    ];
+  }
+
+  prepararTablaResumen(datos) {
+    return [
+      {
+        programa: 'Ayudantía',
+        beneficiarios: 80,
+        postulaciones: 120,
+        tasaAprobacion: 67,
+        estado: 'Óptimo'
+      },
+      {
+        programa: 'Impacto',
+        beneficiarios: 40,
+        postulaciones: 60,
+        tasaAprobacion: 67,
+        estado: 'Óptimo'
+      }
+    ];
+  }
+
+  obtenerIconoInsight(tipo) {
+    const iconos = {
+      success: '✅',
+      warning: '⚠️',
+      error: '❌',
+      info: 'ℹ️'
+    };
+    return iconos[tipo] || '📌';
+  }
+
+  obtenerColorInsight(tipo) {
+    const colores = {
+      success: 'verde',
+      warning: 'amarillo',
+      error: 'rojo',
+      info: 'azul'
+    };
+    return colores[tipo] || 'gris';
+  }
+}
+
+module.exports = new ReportesService();

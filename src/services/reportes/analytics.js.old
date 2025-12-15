@@ -1,0 +1,861 @@
+const {
+  Postulacion,
+  EstudianteBecario,
+  ReporteActividad,
+  Usuario,
+  Plaza,
+  sequelize
+} = require('../../models');
+const { Op } = require('sequelize');
+const moment = require('moment');
+
+class Analytics {
+  /**
+   * Analizar patrones históricos y generar proyecciones
+   */
+  async analyzeAndPredict(periodos = [], tipoBeca = null) {
+    if (periodos.length < 3) {
+      throw new Error('Se requieren al menos 3 períodos históricos para análisis predictivo');
+    }
+
+    // Recopilar datos históricos
+    const historico = await this.recopilarDatosHistoricos(periodos, tipoBeca);
+
+    // Analizar tendencias
+    const tendencias = this.analizarTendencias(historico);
+
+    // Detectar estacionalidad
+    const estacionalidad = this.detectarEstacionalidad(historico);
+
+    // Calcular correlaciones
+    const correlaciones = this.calcularCorrelaciones(historico);
+
+    // Generar proyecciones
+    const proyecciones = this.generarProyecciones(historico, tendencias, estacionalidad);
+
+    // Análisis de riesgos
+    const riesgos = this.analizarRiesgos(proyecciones, historico);
+
+    // Recomendaciones automáticas
+    const recomendaciones = this.generarRecomendaciones(
+      proyecciones,
+      tendencias,
+      correlaciones,
+      riesgos
+    );
+
+    return {
+      historico,
+      tendencias,
+      estacionalidad,
+      correlaciones,
+      proyecciones,
+      riesgos,
+      recomendaciones
+    };
+  }
+
+  /**
+   * Recopilar datos históricos de múltiples períodos
+   */
+  async recopilarDatosHistoricos(periodos, tipoBeca = null) {
+    const datos = [];
+
+    for (const periodo of periodos) {
+      const wherePostulacion = { trimestre: periodo };
+      const whereBecario = { periodoInicio: periodo };
+      const whereReporte = { periodoAcademico: periodo };
+
+      if (tipoBeca) {
+        wherePostulacion.tipoBeca = tipoBeca;
+        whereBecario.tipoBeca = tipoBeca;
+      }
+
+      // Métricas principales
+      const [
+        totalPostulaciones,
+        postulacionesAprobadas,
+        postulacionesRechazadas,
+        totalBeneficiarios,
+        beneficiariosActivos,
+        horasRegistradas,
+        horasAprobadas,
+        evaluacionesSatisfactorias,
+        tasaDesercion,
+        tiempoPromedioEvaluacion,
+        costosEstimados
+      ] = await Promise.all([
+        // Postulaciones
+        Postulacion.count({ where: wherePostulacion }),
+        Postulacion.count({ where: { ...wherePostulacion, estado: 'Aprobada' } }),
+        Postulacion.count({ where: { ...wherePostulacion, estado: 'Rechazada' } }),
+
+        // Beneficiarios
+        EstudianteBecario.count({ where: whereBecario }),
+        EstudianteBecario.count({ where: { ...whereBecario, estado: 'Activa' } }),
+
+        // Horas (Ayudantía)
+        ReporteActividad.sum('horasTrabajadas', { where: whereReporte }),
+        ReporteActividad.sum('horasTrabajadas', {
+          where: { ...whereReporte, estado: 'Aprobada' }
+        }),
+
+        // Evaluaciones
+        EstudianteBecario.count({
+          where: { ...whereBecario, evaluacionSatisfactoria: true }
+        }),
+
+        // Deserción
+        this.calcularTasaDesercion(whereBecario),
+
+        // Tiempo evaluación
+        this.calcularTiempoPromedioEvaluacion(wherePostulacion),
+
+        // Costos
+        this.estimarCostos(whereBecario)
+      ]);
+
+      // Distribución por tipo si no se especifica tipo de beca
+      let distribucionTipos = {};
+      if (!tipoBeca) {
+        distribucionTipos = await this.obtenerDistribucionPorTipo(periodo);
+      }
+
+      // Métricas por departamento (para Ayudantías)
+      const metricasDepartamento = await this.obtenerMetricasPorDepartamento(periodo);
+
+      datos.push({
+        periodo,
+        metricas: {
+          postulaciones: {
+            total: totalPostulaciones,
+            aprobadas: postulacionesAprobadas,
+            rechazadas: postulacionesRechazadas,
+            tasaAprobacion: totalPostulaciones > 0
+              ? (postulacionesAprobadas / totalPostulaciones) * 100
+              : 0
+          },
+          beneficiarios: {
+            total: totalBeneficiarios,
+            activos: beneficiariosActivos,
+            tasaActividad: totalBeneficiarios > 0
+              ? (beneficiariosActivos / totalBeneficiarios) * 100
+              : 0
+          },
+          horas: {
+            registradas: horasRegistradas || 0,
+            aprobadas: horasAprobadas || 0,
+            tasaAprobacion: horasRegistradas > 0
+              ? (horasAprobadas / horasRegistradas) * 100
+              : 100
+          },
+          evaluaciones: {
+            satisfactorias: evaluacionesSatisfactorias,
+            tasaExito: beneficiariosActivos > 0
+              ? (evaluacionesSatisfactorias / beneficiariosActivos) * 100
+              : 0
+          },
+          eficiencia: {
+            tasaDesercion,
+            tiempoPromedioEvaluacion,
+            costosEstimados
+          },
+          distribucion: distribucionTipos,
+          departamentos: metricasDepartamento
+        }
+      });
+    }
+
+    return datos;
+  }
+
+  /**
+   * Analizar tendencias usando regresión lineal
+   */
+  analizarTendencias(historico) {
+    const metricas = [
+      'postulaciones.total',
+      'postulaciones.tasaAprobacion',
+      'beneficiarios.total',
+      'beneficiarios.tasaActividad',
+      'horas.registradas',
+      'evaluaciones.tasaExito',
+      'eficiencia.tasaDesercion',
+      'eficiencia.costosEstimados'
+    ];
+
+    const tendencias = {};
+
+    metricas.forEach(metrica => {
+      const valores = historico.map(h => this.obtenerValorAnidado(h.metricas, metrica));
+      const regresion = this.regresionLineal(valores);
+
+      tendencias[metrica] = {
+        valores,
+        pendiente: regresion.pendiente,
+        intercepto: regresion.intercepto,
+        r2: regresion.r2,
+        tendencia: this.clasificarTendencia(regresion.pendiente, regresion.r2),
+        prediccionProxima: regresion.predecir(historico.length),
+        confianza: this.calcularConfianza(regresion.r2)
+      };
+    });
+
+    return tendencias;
+  }
+
+  /**
+   * Detectar patrones estacionales
+   */
+  detectarEstacionalidad(historico) {
+    if (historico.length < 6) {
+      return { detectada: false, mensaje: 'Datos insuficientes para detectar estacionalidad' };
+    }
+
+    const postulaciones = historico.map(h => h.metricas.postulaciones.total);
+
+    // Separar por trimestre (asumiendo formato periodo: "2024-1", "2024-2", "2024-3")
+    const porTrimestre = {
+      1: [], // Enero-Abril
+      2: [], // Mayo-Agosto
+      3: []  // Septiembre-Diciembre
+    };
+
+    historico.forEach(h => {
+      const trimestre = parseInt(h.periodo.split('-')[1]);
+      if (trimestre >= 1 && trimestre <= 3) {
+        porTrimestre[trimestre].push(h.metricas.postulaciones.total);
+      }
+    });
+
+    // Calcular promedios por trimestre
+    const promedios = {};
+    let variacionMaxima = 0;
+
+    Object.keys(porTrimestre).forEach(trimestre => {
+      if (porTrimestre[trimestre].length > 0) {
+        promedios[trimestre] =
+          porTrimestre[trimestre].reduce((a, b) => a + b, 0) / porTrimestre[trimestre].length;
+      }
+    });
+
+    // Calcular variación entre trimestres
+    const valores = Object.values(promedios);
+    if (valores.length > 1) {
+      const max = Math.max(...valores);
+      const min = Math.min(...valores);
+      const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
+      variacionMaxima = promedio > 0 ? ((max - min) / promedio) * 100 : 0;
+    }
+
+    // Detectar estacionalidad si la variación es significativa (>20%)
+    const estacionalidadDetectada = variacionMaxima > 20;
+
+    return {
+      detectada: estacionalidadDetectada,
+      variacionPorcentual: variacionMaxima.toFixed(2),
+      promediosPorTrimestre: promedios,
+      patron: estacionalidadDetectada ? this.identificarPatronEstacional(promedios) : null,
+      factorEstacional: this.calcularFactoresEstacionales(porTrimestre, promedios)
+    };
+  }
+
+  /**
+   * Calcular correlaciones entre variables
+   */
+  calcularCorrelaciones(historico) {
+    const variables = {
+      postulaciones: historico.map(h => h.metricas.postulaciones.total),
+      aprobaciones: historico.map(h => h.metricas.postulaciones.aprobadas),
+      beneficiarios: historico.map(h => h.metricas.beneficiarios.total),
+      horas: historico.map(h => h.metricas.horas.registradas),
+      desercion: historico.map(h => h.metricas.eficiencia.tasaDesercion),
+      costos: historico.map(h => h.metricas.eficiencia.costosEstimados)
+    };
+
+    const correlaciones = {};
+
+    // Calcular correlación entre pares de variables
+    const pares = [
+      ['postulaciones', 'aprobaciones'],
+      ['postulaciones', 'beneficiarios'],
+      ['beneficiarios', 'horas'],
+      ['beneficiarios', 'desercion'],
+      ['beneficiarios', 'costos'],
+      ['horas', 'costos']
+    ];
+
+    pares.forEach(([var1, var2]) => {
+      const correlacion = this.correlacionPearson(variables[var1], variables[var2]);
+      correlaciones[`${var1}_${var2}`] = {
+        valor: correlacion,
+        fuerza: this.clasificarCorrelacion(correlacion),
+        significancia: this.pruebaSignificancia(correlacion, historico.length)
+      };
+    });
+
+    return correlaciones;
+  }
+
+  /**
+   * Generar proyecciones para próximos períodos
+   */
+  generarProyecciones(historico, tendencias, estacionalidad) {
+    const numeroProyecciones = 3; // Proyectar próximos 3 períodos
+    const proyecciones = [];
+
+    for (let i = 1; i <= numeroProyecciones; i++) {
+      const indiceProyeccion = historico.length + i - 1;
+
+      // Calcular período proyectado
+      const ultimoPeriodo = historico[historico.length - 1].periodo;
+      const periodoProyectado = this.calcularSiguientePeriodo(ultimoPeriodo, i);
+
+      // Proyecciones base usando tendencia lineal
+      const postulacionesBase = tendencias['postulaciones.total'].prediccionProxima +
+        (tendencias['postulaciones.total'].pendiente * (i - 1));
+
+      const beneficiariosBase = tendencias['beneficiarios.total'].prediccionProxima +
+        (tendencias['beneficiarios.total'].pendiente * (i - 1));
+
+      const horasBase = tendencias['horas.registradas'].prediccionProxima +
+        (tendencias['horas.registradas'].pendiente * (i - 1));
+
+      // Aplicar factor estacional si existe
+      let factorEstacional = 1;
+      if (estacionalidad.detectada) {
+        const trimestre = parseInt(periodoProyectado.split('-')[1]);
+        factorEstacional = estacionalidad.factorEstacional[trimestre] || 1;
+      }
+
+      // Calcular intervalos de confianza (95%)
+      const errorEstandar = this.calcularErrorEstandar(historico, 'postulaciones.total');
+      const z95 = 1.96; // Valor z para 95% de confianza
+
+      proyecciones.push({
+        periodo: periodoProyectado,
+        postulaciones: {
+          estimado: Math.round(postulacionesBase * factorEstacional),
+          minimo: Math.round((postulacionesBase - z95 * errorEstandar) * factorEstacional),
+          maximo: Math.round((postulacionesBase + z95 * errorEstandar) * factorEstacional)
+        },
+        beneficiarios: {
+          estimado: Math.round(beneficiariosBase * factorEstacional),
+          minimo: Math.round((beneficiariosBase - z95 * errorEstandar * 0.8) * factorEstacional),
+          maximo: Math.round((beneficiariosBase + z95 * errorEstandar * 0.8) * factorEstacional)
+        },
+        horas: {
+          estimado: Math.round(horasBase),
+          minimo: Math.round(horasBase * 0.85),
+          maximo: Math.round(horasBase * 1.15)
+        },
+        tasaAprobacion: {
+          estimado: Math.min(100, Math.max(0,
+            tendencias['postulaciones.tasaAprobacion'].prediccionProxima +
+            (tendencias['postulaciones.tasaAprobacion'].pendiente * (i - 1))
+          ))
+        },
+        costos: {
+          estimado: tendencias['eficiencia.costosEstimados'].prediccionProxima +
+            (tendencias['eficiencia.costosEstimados'].pendiente * (i - 1))
+        },
+        confianza: this.calcularConfianzaProyeccion(i, tendencias)
+      });
+    }
+
+    // Agregar escenarios
+    return {
+      proyeccionBase: proyecciones,
+      escenarios: this.generarEscenarios(proyecciones),
+      metodologia: 'Regresión lineal con ajuste estacional',
+      confianzaGeneral: this.calcularConfianzaGeneral(tendencias)
+    };
+  }
+
+  /**
+   * Analizar riesgos basados en proyecciones
+   */
+  analizarRiesgos(proyecciones, historico) {
+    const riesgos = [];
+
+    // Capacidad del sistema
+    const capacidadMaxima = this.estimarCapacidadMaxima(historico);
+    proyecciones.proyeccionBase.forEach(p => {
+      if (p.postulaciones.maximo > capacidadMaxima.postulaciones) {
+        riesgos.push({
+          tipo: 'capacidad',
+          severidad: 'alta',
+          periodo: p.periodo,
+          descripcion: `Proyección de ${p.postulaciones.maximo} postulaciones excede capacidad estimada de ${capacidadMaxima.postulaciones}`,
+          impacto: 'Sobrecarga del sistema de evaluación',
+          mitigacion: 'Aumentar personal de evaluación o implementar pre-filtros automatizados'
+        });
+      }
+    });
+
+    // Presupuesto
+    const presupuestoEstimado = this.estimarPresupuesto(historico);
+    let costoAcumulado = 0;
+    proyecciones.proyeccionBase.forEach(p => {
+      costoAcumulado += p.costos.estimado;
+      if (costoAcumulado > presupuestoEstimado) {
+        riesgos.push({
+          tipo: 'presupuestario',
+          severidad: 'critica',
+          periodo: p.periodo,
+          descripcion: `Costo acumulado proyectado ($${costoAcumulado.toFixed(2)}) excede presupuesto estimado`,
+          impacto: 'Déficit presupuestario',
+          mitigacion: 'Revisar criterios de asignación o buscar financiamiento adicional'
+        });
+      }
+    });
+
+    // Recursos humanos
+    const supervisoresDisponibles = 25; // Estimado
+    proyecciones.proyeccionBase.forEach(p => {
+      const supervisoresRequeridos = Math.ceil(p.beneficiarios.estimado / 8);
+      if (supervisoresRequeridos > supervisoresDisponibles) {
+        riesgos.push({
+          tipo: 'recursos_humanos',
+          severidad: 'media',
+          periodo: p.periodo,
+          descripcion: `Se requieren ${supervisoresRequeridos} supervisores pero solo hay ${supervisoresDisponibles} disponibles`,
+          impacto: 'Sobrecarga de supervisores',
+          mitigacion: 'Reclutar supervisores adicionales o redistribuir carga'
+        });
+      }
+    });
+
+    // Tendencias negativas
+    const tendenciasNegativas = this.identificarTendenciasNegativas(historico);
+    tendenciasNegativas.forEach(t => {
+      riesgos.push({
+        tipo: 'tendencia',
+        severidad: 'media',
+        descripcion: t.descripcion,
+        impacto: t.impacto,
+        mitigacion: t.mitigacion
+      });
+    });
+
+    return {
+      riesgos,
+      resumen: {
+        total: riesgos.length,
+        criticos: riesgos.filter(r => r.severidad === 'critica').length,
+        altos: riesgos.filter(r => r.severidad === 'alta').length,
+        medios: riesgos.filter(r => r.severidad === 'media').length
+      },
+      requiereAccionInmediata: riesgos.some(r => r.severidad === 'critica')
+    };
+  }
+
+  /**
+   * Generar recomendaciones basadas en análisis
+   */
+  generarRecomendaciones(proyecciones, tendencias, correlaciones, riesgos) {
+    const recomendaciones = [];
+
+    // Basadas en tendencias
+    Object.entries(tendencias).forEach(([metrica, datos]) => {
+      if (metrica === 'postulaciones.total' && datos.tendencia === 'creciente_fuerte') {
+        recomendaciones.push({
+          categoria: 'capacidad',
+          prioridad: 'alta',
+          recomendacion: 'Preparar recursos adicionales para manejar el crecimiento proyectado en postulaciones',
+          fundamentacion: `Tendencia de crecimiento sostenido con pendiente de ${datos.pendiente}`,
+          acciones: [
+            'Contratar evaluadores temporales',
+            'Implementar sistema de pre-evaluación automatizada',
+            'Optimizar procesos de evaluación'
+          ]
+        });
+      }
+
+      if (metrica === 'eficiencia.tasaDesercion' && datos.tendencia === 'creciente') {
+        recomendaciones.push({
+          categoria: 'retencion',
+          prioridad: 'critica',
+          recomendacion: 'Implementar programa de retención urgente',
+          fundamentacion: `Tasa de deserción aumentando con tendencia ${datos.pendiente}`,
+          acciones: [
+            'Identificar causas principales de deserción',
+            'Implementar sistema de alertas tempranas',
+            'Crear programa de mentorías',
+            'Revisar requisitos y cargas de trabajo'
+          ]
+        });
+      }
+    });
+
+    // Basadas en correlaciones
+    if (correlaciones.beneficiarios_desercion && correlaciones.beneficiarios_desercion.valor < -0.5) {
+      recomendaciones.push({
+        categoria: 'gestion',
+        prioridad: 'media',
+        recomendacion: 'Mejorar sistemas de apoyo al aumentar beneficiarios',
+        fundamentacion: `Correlación negativa fuerte (${correlaciones.beneficiarios_desercion.valor.toFixed(2)}) entre beneficiarios y deserción`,
+        acciones: [
+          'Escalar proporcionalmente recursos de apoyo',
+          'Mantener ratio supervisor/estudiante óptimo'
+        ]
+      });
+    }
+
+    // Basadas en proyecciones
+    const ultimaProyeccion = proyecciones.proyeccionBase[proyecciones.proyeccionBase.length - 1];
+    if (ultimaProyeccion.beneficiarios.maximo > 200) {
+      recomendaciones.push({
+        categoria: 'planificacion',
+        prioridad: 'alta',
+        recomendacion: 'Expandir capacidad del programa',
+        fundamentacion: `Proyección de hasta ${ultimaProyeccion.beneficiarios.maximo} beneficiarios para ${ultimaProyeccion.periodo}`,
+        acciones: [
+          'Aumentar plazas disponibles',
+          'Reclutar supervisores adicionales',
+          'Ampliar presupuesto del programa'
+        ]
+      });
+    }
+
+    // Basadas en riesgos
+    if (riesgos.resumen.criticos > 0) {
+      recomendaciones.push({
+        categoria: 'riesgo',
+        prioridad: 'critica',
+        recomendacion: 'Atender riesgos críticos identificados inmediatamente',
+        fundamentacion: `${riesgos.resumen.criticos} riesgos críticos detectados`,
+        acciones: riesgos.riesgos
+          .filter(r => r.severidad === 'critica')
+          .map(r => r.mitigacion)
+      });
+    }
+
+    // Recomendaciones estacionales
+    if (proyecciones.escenarios) {
+      recomendaciones.push({
+        categoria: 'estrategia',
+        prioridad: 'media',
+        recomendacion: 'Ajustar estrategia según escenarios proyectados',
+        fundamentacion: 'Múltiples escenarios posibles con diferentes probabilidades',
+        acciones: [
+          `Prepararse para escenario optimista: ${proyecciones.escenarios.optimista.descripcion}`,
+          `Plan base para escenario realista: ${proyecciones.escenarios.realista.descripcion}`,
+          `Contingencia para escenario pesimista: ${proyecciones.escenarios.pesimista.descripcion}`
+        ]
+      });
+    }
+
+    // Ordenar por prioridad
+    const orden = { 'critica': 0, 'alta': 1, 'media': 2, 'baja': 3 };
+    recomendaciones.sort((a, b) => orden[a.prioridad] - orden[b.prioridad]);
+
+    return recomendaciones;
+  }
+
+  // ========== MÉTODOS AUXILIARES ==========
+
+  regresionLineal(valores) {
+    const n = valores.length;
+    const x = Array.from({ length: n }, (_, i) => i);
+    const y = valores;
+
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+    const sumX2 = x.reduce((sum, xi) => sum + xi * xi, 0);
+    const sumY2 = y.reduce((sum, yi) => sum + yi * yi, 0);
+
+    const pendiente = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercepto = (sumY - pendiente * sumX) / n;
+
+    // Calcular R²
+    const yMedia = sumY / n;
+    const ssTotal = y.reduce((sum, yi) => sum + Math.pow(yi - yMedia, 2), 0);
+    const ssResidual = y.reduce((sum, yi, i) => {
+      const yPredicho = pendiente * i + intercepto;
+      return sum + Math.pow(yi - yPredicho, 2);
+    }, 0);
+
+    const r2 = ssTotal > 0 ? 1 - (ssResidual / ssTotal) : 0;
+
+    return {
+      pendiente,
+      intercepto,
+      r2,
+      predecir: (x) => pendiente * x + intercepto
+    };
+  }
+
+  correlacionPearson(x, y) {
+    const n = x.length;
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+    const sumX2 = x.reduce((sum, xi) => sum + xi * xi, 0);
+    const sumY2 = y.reduce((sum, yi) => sum + yi * yi, 0);
+
+    const numerador = n * sumXY - sumX * sumY;
+    const denominador = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+
+    return denominador > 0 ? numerador / denominador : 0;
+  }
+
+  obtenerValorAnidado(objeto, path) {
+    return path.split('.').reduce((obj, key) => obj?.[key], objeto) || 0;
+  }
+
+  clasificarTendencia(pendiente, r2) {
+    const umbralSignificancia = 0.3; // R² mínimo para considerar tendencia significativa
+
+    if (r2 < umbralSignificancia) return 'sin_tendencia_clara';
+
+    if (Math.abs(pendiente) < 0.5) return 'estable';
+    if (pendiente > 5) return 'creciente_fuerte';
+    if (pendiente > 0) return 'creciente';
+    if (pendiente < -5) return 'decreciente_fuerte';
+    return 'decreciente';
+  }
+
+  calcularConfianza(r2) {
+    if (r2 > 0.8) return 'alta';
+    if (r2 > 0.5) return 'media';
+    return 'baja';
+  }
+
+  identificarPatronEstacional(promedios) {
+    const valores = Object.values(promedios);
+    const max = Math.max(...valores);
+    const maxTrimestre = Object.keys(promedios).find(k => promedios[k] === max);
+
+    return {
+      trimestre_pico: maxTrimestre,
+      descripcion: `Mayor demanda en trimestre ${maxTrimestre}`,
+      factor_multiplicador: max / (valores.reduce((a, b) => a + b, 0) / valores.length)
+    };
+  }
+
+  calcularFactoresEstacionales(porTrimestre, promedios) {
+    const promedioGeneral = Object.values(promedios).reduce((a, b) => a + b, 0) /
+                            Object.values(promedios).length;
+    const factores = {};
+
+    Object.keys(promedios).forEach(trimestre => {
+      factores[trimestre] = promedioGeneral > 0 ? promedios[trimestre] / promedioGeneral : 1;
+    });
+
+    return factores;
+  }
+
+  clasificarCorrelacion(valor) {
+    const abs = Math.abs(valor);
+    if (abs > 0.8) return 'muy_fuerte';
+    if (abs > 0.6) return 'fuerte';
+    if (abs > 0.4) return 'moderada';
+    if (abs > 0.2) return 'debil';
+    return 'muy_debil';
+  }
+
+  pruebaSignificancia(r, n) {
+    // Test t para significancia de correlación
+    const t = r * Math.sqrt((n - 2) / (1 - r * r));
+    const tCritico = 2.0; // Aproximación para p < 0.05
+
+    return Math.abs(t) > tCritico ? 'significativa' : 'no_significativa';
+  }
+
+  calcularSiguientePeriodo(ultimoPeriodo, incremento) {
+    const [año, trimestre] = ultimoPeriodo.split('-').map(Number);
+    let nuevoTrimestre = trimestre + incremento;
+    let nuevoAño = año;
+
+    while (nuevoTrimestre > 3) {
+      nuevoTrimestre -= 3;
+      nuevoAño++;
+    }
+
+    return `${nuevoAño}-${nuevoTrimestre}`;
+  }
+
+  calcularErrorEstandar(historico, metrica) {
+    const valores = historico.map(h => this.obtenerValorAnidado(h.metricas, metrica));
+    const n = valores.length;
+    const media = valores.reduce((a, b) => a + b, 0) / n;
+    const varianza = valores.reduce((sum, v) => sum + Math.pow(v - media, 2), 0) / (n - 1);
+    return Math.sqrt(varianza / n);
+  }
+
+  calcularConfianzaProyeccion(distancia, tendencias) {
+    // La confianza disminuye con la distancia
+    const confianzaBase = this.calcularConfianzaGeneral(tendencias);
+    const factorDecaimiento = Math.exp(-0.3 * (distancia - 1));
+
+    const confianzaFinal = confianzaBase * factorDecaimiento;
+
+    if (confianzaFinal > 0.7) return 'alta';
+    if (confianzaFinal > 0.4) return 'media';
+    return 'baja';
+  }
+
+  calcularConfianzaGeneral(tendencias) {
+    const r2Values = Object.values(tendencias)
+      .map(t => t.r2)
+      .filter(r2 => !isNaN(r2));
+
+    return r2Values.length > 0
+      ? r2Values.reduce((a, b) => a + b, 0) / r2Values.length
+      : 0;
+  }
+
+  generarEscenarios(proyecciones) {
+    const ultimaProyeccion = proyecciones[proyecciones.length - 1];
+
+    return {
+      optimista: {
+        descripcion: 'Crecimiento sostenido con mejora en eficiencia',
+        postulaciones: Math.round(ultimaProyeccion.postulaciones.maximo * 1.1),
+        beneficiarios: Math.round(ultimaProyeccion.beneficiarios.maximo * 1.1),
+        tasaAprobacion: Math.min(100, ultimaProyeccion.tasaAprobacion.estimado + 10),
+        probabilidad: 25
+      },
+      realista: {
+        descripcion: 'Continuación de tendencias actuales',
+        postulaciones: ultimaProyeccion.postulaciones.estimado,
+        beneficiarios: ultimaProyeccion.beneficiarios.estimado,
+        tasaAprobacion: ultimaProyeccion.tasaAprobacion.estimado,
+        probabilidad: 50
+      },
+      pesimista: {
+        descripcion: 'Desaceleración con restricciones de recursos',
+        postulaciones: Math.round(ultimaProyeccion.postulaciones.minimo * 0.9),
+        beneficiarios: Math.round(ultimaProyeccion.beneficiarios.minimo * 0.9),
+        tasaAprobacion: Math.max(0, ultimaProyeccion.tasaAprobacion.estimado - 10),
+        probabilidad: 25
+      }
+    };
+  }
+
+  async calcularTasaDesercion(where) {
+    const total = await EstudianteBecario.count({ where });
+    const canceladas = await EstudianteBecario.count({
+      where: { ...where, estado: 'Cancelada' }
+    });
+    return total > 0 ? (canceladas / total) * 100 : 0;
+  }
+
+  async calcularTiempoPromedioEvaluacion(where) {
+    const postulaciones = await Postulacion.findAll({
+      where: {
+        ...where,
+        estado: ['Aprobada', 'Rechazada'],
+        fechaEvaluacion: { [Op.not]: null }
+      },
+      attributes: ['fechaPostulacion', 'fechaEvaluacion']
+    });
+
+    if (postulaciones.length === 0) return 0;
+
+    const tiempos = postulaciones.map(p => {
+      const dias = moment(p.fechaEvaluacion).diff(moment(p.fechaPostulacion), 'days');
+      return dias;
+    });
+
+    return tiempos.reduce((a, b) => a + b, 0) / tiempos.length;
+  }
+
+  async estimarCostos(where) {
+    // Estimación simplificada basada en tipo de beca
+    const beneficiarios = await EstudianteBecario.findAll({
+      where,
+      attributes: ['tipoBeca']
+    });
+
+    const costosPorTipo = {
+      'Ayudantía': 500,
+      'Impacto': 1000,
+      'Excelencia': 1500,
+      'Exoneración de Pago': 2000
+    };
+
+    return beneficiarios.reduce((total, b) => {
+      return total + (costosPorTipo[b.tipoBeca] || 500);
+    }, 0);
+  }
+
+  async obtenerDistribucionPorTipo(periodo) {
+    const distribucion = await Postulacion.findAll({
+      where: { trimestre: periodo },
+      attributes: [
+        'tipoBeca',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
+      ],
+      group: ['tipoBeca'],
+      raw: true
+    });
+
+    const resultado = {};
+    distribucion.forEach(d => {
+      resultado[d.tipoBeca] = parseInt(d.cantidad);
+    });
+    return resultado;
+  }
+
+  async obtenerMetricasPorDepartamento(periodo) {
+    // Simplificado - en producción consultaría las plazas
+    return {
+      'Ingeniería': { estudiantes: 15, horas: 1800 },
+      'Administración': { estudiantes: 10, horas: 1200 },
+      'Derecho': { estudiantes: 8, horas: 960 },
+      'Psicología': { estudiantes: 5, horas: 600 }
+    };
+  }
+
+  estimarCapacidadMaxima(historico) {
+    // Basado en máximos históricos con margen del 20%
+    const maxPostulaciones = Math.max(...historico.map(h => h.metricas.postulaciones.total));
+    const maxBeneficiarios = Math.max(...historico.map(h => h.metricas.beneficiarios.total));
+
+    return {
+      postulaciones: Math.round(maxPostulaciones * 1.2),
+      beneficiarios: Math.round(maxBeneficiarios * 1.2)
+    };
+  }
+
+  estimarPresupuesto(historico) {
+    // Promedio de costos históricos con incremento del 10%
+    const costos = historico.map(h => h.metricas.eficiencia.costosEstimados);
+    const promedio = costos.reduce((a, b) => a + b, 0) / costos.length;
+    return promedio * 1.1 * 3; // Para 3 períodos
+  }
+
+  identificarTendenciasNegativas(historico) {
+    const tendencias = [];
+
+    // Deserción creciente
+    const desercion = historico.map(h => h.metricas.eficiencia.tasaDesercion);
+    if (desercion.length >= 3) {
+      const ultimos3 = desercion.slice(-3);
+      if (ultimos3[2] > ultimos3[1] && ultimos3[1] > ultimos3[0]) {
+        tendencias.push({
+          descripcion: 'Tasa de deserción en aumento constante',
+          impacto: 'Pérdida de efectividad del programa',
+          mitigacion: 'Revisar causas y mejorar apoyo estudiantil'
+        });
+      }
+    }
+
+    // Tiempo de evaluación creciente
+    const tiempos = historico.map(h => h.metricas.eficiencia.tiempoPromedioEvaluacion);
+    if (tiempos.length >= 2 && tiempos[tiempos.length - 1] > tiempos[tiempos.length - 2] * 1.5) {
+      tendencias.push({
+        descripcion: 'Tiempo de evaluación aumentando significativamente',
+        impacto: 'Retrasos en asignación de beneficios',
+        mitigacion: 'Optimizar proceso de evaluación'
+      });
+    }
+
+    return tendencias;
+  }
+}
+
+module.exports = new Analytics();

@@ -1,0 +1,823 @@
+const ExcelJS = require('exceljs');
+const moment = require('moment');
+const numeral = require('numeral');
+
+class ExcelEnhanced {
+  constructor() {
+    this.workbook = null;
+
+    // Paleta de colores institucional
+    this.colors = {
+      primary: '667EEA',
+      secondary: '764BA2',
+      success: '10B981',
+      warning: 'F59E0B',
+      danger: 'EF4444',
+      info: '3B82F6',
+      dark: '1F2937',
+      light: 'F9FAFB',
+      gray: '9CA3AF',
+      headerGradient1: '4A5568',
+      headerGradient2: '2D3748'
+    };
+
+    // Estilos predefinidos
+    this.styles = {
+      titulo: {
+        font: { name: 'Calibri', size: 20, bold: true, color: { argb: 'FFFFFFFF' } },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF667EEA' } },
+        alignment: { horizontal: 'center', vertical: 'middle' },
+        border: this.getAllBorders('FF667EEA')
+      },
+      subtitulo: {
+        font: { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF1F2937' } },
+        alignment: { horizontal: 'left', vertical: 'middle' }
+      },
+      encabezado: {
+        font: { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } },
+        fill: {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF4A5568' }
+        },
+        alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+        border: this.getAllBorders('FF2D3748')
+      },
+      celda: {
+        font: { name: 'Calibri', size: 10 },
+        alignment: { horizontal: 'left', vertical: 'middle' },
+        border: this.getAllBorders('FFE5E7EB')
+      },
+      numero: {
+        font: { name: 'Calibri', size: 10 },
+        alignment: { horizontal: 'right', vertical: 'middle' },
+        numFmt: '#,##0',
+        border: this.getAllBorders('FFE5E7EB')
+      },
+      decimal: {
+        font: { name: 'Calibri', size: 10 },
+        alignment: { horizontal: 'right', vertical: 'middle' },
+        numFmt: '#,##0.00',
+        border: this.getAllBorders('FFE5E7EB')
+      },
+      porcentaje: {
+        font: { name: 'Calibri', size: 10 },
+        alignment: { horizontal: 'right', vertical: 'middle' },
+        numFmt: '0.00%',
+        border: this.getAllBorders('FFE5E7EB')
+      },
+      moneda: {
+        font: { name: 'Calibri', size: 10 },
+        alignment: { horizontal: 'right', vertical: 'middle' },
+        numFmt: '"$"#,##0.00',
+        border: this.getAllBorders('FFE5E7EB')
+      },
+      fecha: {
+        font: { name: 'Calibri', size: 10 },
+        alignment: { horizontal: 'center', vertical: 'middle' },
+        numFmt: 'dd/mm/yyyy',
+        border: this.getAllBorders('FFE5E7EB')
+      },
+      fechaHora: {
+        font: { name: 'Calibri', size: 10 },
+        alignment: { horizontal: 'center', vertical: 'middle' },
+        numFmt: 'dd/mm/yyyy hh:mm',
+        border: this.getAllBorders('FFE5E7EB')
+      }
+    };
+  }
+
+  /**
+   * Crear nuevo libro de Excel
+   */
+  createWorkbook(metadata = {}) {
+    this.workbook = new ExcelJS.Workbook();
+
+    // Metadata del documento
+    this.workbook.creator = metadata.creator || 'Sistema de Gestión de Becas';
+    this.workbook.lastModifiedBy = metadata.lastModifiedBy || 'Sistema Automatizado';
+    this.workbook.created = new Date();
+    this.workbook.modified = new Date();
+    this.workbook.company = 'Universidad Metropolitana';
+    this.workbook.title = metadata.title || 'Reporte de Becas';
+    this.workbook.subject = metadata.subject || 'Estadísticas y Análisis';
+    this.workbook.keywords = metadata.keywords || 'becas, estadísticas, reportes';
+    this.workbook.category = metadata.category || 'Reportes';
+    this.workbook.description = metadata.description || 'Reporte generado automáticamente por el Sistema de Gestión de Becas';
+
+    // Propiedades personalizadas
+    this.workbook.properties = {
+      ...metadata.properties,
+      periodoAcademico: metadata.periodoAcademico,
+      fechaGeneracion: moment().format('DD/MM/YYYY HH:mm')
+    };
+
+    return this.workbook;
+  }
+
+  /**
+   * Agregar hoja de índice con navegación
+   */
+  addIndexSheet(sheets = []) {
+    const worksheet = this.workbook.addWorksheet('Índice', {
+      properties: { tabColor: { argb: 'FF667EEA' } }
+    });
+
+    // Configurar columnas
+    worksheet.columns = [
+      { width: 5 },
+      { width: 30 },
+      { width: 50 },
+      { width: 20 }
+    ];
+
+    // Título
+    worksheet.mergeCells('B2:D2');
+    const titleCell = worksheet.getCell('B2');
+    titleCell.value = 'ÍNDICE DE CONTENIDOS';
+    Object.assign(titleCell, this.styles.titulo);
+    worksheet.getRow(2).height = 40;
+
+    // Información del reporte
+    worksheet.getCell('B4').value = 'Fecha de Generación:';
+    worksheet.getCell('C4').value = moment().format('DD [de] MMMM [de] YYYY');
+    worksheet.getCell('B5').value = 'Hora:';
+    worksheet.getCell('C5').value = moment().format('HH:mm [hrs]');
+    worksheet.getCell('B6').value = 'Usuario:';
+    worksheet.getCell('C6').value = this.workbook.lastModifiedBy;
+    worksheet.getCell('B7').value = 'Período:';
+    worksheet.getCell('C7').value = this.workbook.properties.periodoAcademico || 'Todos';
+
+    // Estilo para labels
+    ['B4', 'B5', 'B6', 'B7'].forEach(cell => {
+      worksheet.getCell(cell).font = { bold: true };
+    });
+
+    // Lista de hojas
+    let row = 10;
+    worksheet.getCell(`B${row}`).value = 'Contenido del Reporte';
+    worksheet.getCell(`B${row}`).font = { size: 14, bold: true };
+    row += 2;
+
+    sheets.forEach((sheet, index) => {
+      const numCell = worksheet.getCell(`B${row}`);
+      const nameCell = worksheet.getCell(`C${row}`);
+      const actionCell = worksheet.getCell(`D${row}`);
+
+      numCell.value = `${index + 1}.`;
+      nameCell.value = sheet.name;
+
+      // Crear hipervínculo a la hoja
+      nameCell.value = {
+        text: sheet.name,
+        hyperlink: `#'${sheet.sheetName}'!A1`
+      };
+      nameCell.font = { color: { argb: 'FF667EEA' }, underline: true };
+
+      actionCell.value = 'Ir a hoja →';
+      actionCell.font = { color: { argb: 'FF667EEA' }, italic: true };
+
+      // Descripción
+      if (sheet.description) {
+        worksheet.getCell(`C${row + 1}`).value = sheet.description;
+        worksheet.getCell(`C${row + 1}`).font = { size: 9, italic: true, color: { argb: 'FF6B7280' } };
+        row++;
+      }
+
+      row++;
+    });
+
+    // Agregar imagen/logo si existe
+    this.addLogo(worksheet, 'E2');
+
+    return worksheet;
+  }
+
+  /**
+   * Crear hoja de resumen ejecutivo con KPIs
+   */
+  addResumenEjecutivo(data) {
+    const worksheet = this.workbook.addWorksheet('Resumen Ejecutivo', {
+      properties: { tabColor: { argb: 'FF10B981' } }
+    });
+
+    // Configurar columnas
+    worksheet.columns = [
+      { width: 2 },
+      { width: 25 },
+      { width: 20 },
+      { width: 15 },
+      { width: 15 },
+      { width: 20 },
+      { width: 15 }
+    ];
+
+    // Título principal
+    worksheet.mergeCells('B2:G2');
+    const titleCell = worksheet.getCell('B2');
+    titleCell.value = 'RESUMEN EJECUTIVO - SISTEMA DE BECAS';
+    Object.assign(titleCell, this.styles.titulo);
+    worksheet.getRow(2).height = 45;
+
+    // KPIs principales (tarjetas)
+    let row = 4;
+    worksheet.getCell(`B${row}`).value = 'Indicadores Clave de Desempeño (KPIs)';
+    worksheet.getCell(`B${row}`).font = { size: 14, bold: true };
+    row += 2;
+
+    // Crear tarjetas de KPIs
+    if (data.kpis && Array.isArray(data.kpis)) {
+      const kpiStartRow = row;
+
+      data.kpis.forEach((kpi, index) => {
+        const col = 2 + (index % 3) * 2; // Distribuir en 3 columnas
+        const kpiRow = kpiStartRow + Math.floor(index / 3) * 4;
+
+        // Tarjeta de KPI
+        const kpiCell = worksheet.getCell(kpiRow, col);
+        const valueCell = worksheet.getCell(kpiRow + 1, col);
+        const changeCell = worksheet.getCell(kpiRow + 2, col);
+
+        // Nombre del KPI
+        kpiCell.value = kpi.nombre;
+        kpiCell.font = { size: 10, bold: true, color: { argb: 'FF6B7280' } };
+
+        // Valor del KPI
+        valueCell.value = this.formatearValor(kpi.valor, kpi.formato);
+        valueCell.font = { size: 20, bold: true, color: { argb: this.getColorBySemaforo(kpi.semaforo) } };
+
+        // Cambio
+        if (kpi.cambio !== undefined) {
+          const cambioTexto = kpi.cambio > 0 ? `↑ ${kpi.cambio}%` : kpi.cambio < 0 ? `↓ ${Math.abs(kpi.cambio)}%` : '= 0%';
+          changeCell.value = cambioTexto;
+          changeCell.font = {
+            size: 11,
+            color: { argb: kpi.cambio > 0 ? 'FF10B981' : kpi.cambio < 0 ? 'FFEF4444' : 'FF9CA3AF' }
+          };
+        }
+
+        // Aplicar borde a la tarjeta
+        this.applyCardBorder(worksheet, kpiRow, col, kpiRow + 2, col);
+      });
+
+      row = kpiStartRow + Math.ceil(data.kpis.length / 3) * 4 + 2;
+    }
+
+    // Tabla de resumen
+    if (data.resumenTabla) {
+      worksheet.getCell(`B${row}`).value = 'Resumen por Programa de Beca';
+      worksheet.getCell(`B${row}`).font = { size: 12, bold: true };
+      row += 2;
+
+      // Encabezados
+      const headers = ['Programa', 'Beneficiarios', 'Postulaciones', 'Tasa Aprobación', 'Estado'];
+      headers.forEach((header, index) => {
+        const cell = worksheet.getCell(row, index + 2);
+        cell.value = header;
+        Object.assign(cell, this.styles.encabezado);
+      });
+
+      row++;
+
+      // Datos
+      data.resumenTabla.forEach(fila => {
+        worksheet.getCell(row, 2).value = fila.programa;
+        worksheet.getCell(row, 3).value = fila.beneficiarios;
+        worksheet.getCell(row, 4).value = fila.postulaciones;
+        worksheet.getCell(row, 5).value = fila.tasaAprobacion / 100;
+        worksheet.getCell(row, 6).value = fila.estado;
+
+        // Aplicar estilos
+        worksheet.getCell(row, 2).style = this.styles.celda;
+        worksheet.getCell(row, 3).style = this.styles.numero;
+        worksheet.getCell(row, 4).style = this.styles.numero;
+        worksheet.getCell(row, 5).style = this.styles.porcentaje;
+        worksheet.getCell(row, 6).style = this.styles.celda;
+
+        // Color condicional para estado
+        const estadoCell = worksheet.getCell(row, 6);
+        if (fila.estado === 'Óptimo') {
+          estadoCell.font = { ...estadoCell.font, color: { argb: 'FF10B981' } };
+        } else if (fila.estado === 'Advertencia') {
+          estadoCell.font = { ...estadoCell.font, color: { argb: 'FFF59E0B' } };
+        } else if (fila.estado === 'Crítico') {
+          estadoCell.font = { ...estadoCell.font, color: { argb: 'FFEF4444' } };
+        }
+
+        row++;
+      });
+    }
+
+    // Agregar mini gráficos si es posible (usando caracteres Unicode)
+    if (data.miniGraficos) {
+      row += 2;
+      worksheet.getCell(`B${row}`).value = 'Tendencia Últimos 5 Períodos';
+      worksheet.getCell(`B${row}`).font = { size: 12, bold: true };
+      row += 2;
+
+      data.miniGraficos.forEach(grafico => {
+        worksheet.getCell(row, 2).value = grafico.nombre;
+        worksheet.getCell(row, 3).value = this.crearMiniGrafico(grafico.valores);
+        worksheet.getCell(row, 3).font = { name: 'Courier New', size: 12 };
+        row++;
+      });
+    }
+
+    return worksheet;
+  }
+
+  /**
+   * Agregar hoja de datos con tabla formateada
+   */
+  addDataSheet(name, data, options = {}) {
+    const worksheet = this.workbook.addWorksheet(name, {
+      properties: { tabColor: { argb: options.tabColor || 'FF3B82F6' } }
+    });
+
+    // Título si se proporciona
+    if (options.title) {
+      worksheet.mergeCells(`A1:${this.getColumnLetter(data.headers.length)}1`);
+      const titleCell = worksheet.getCell('A1');
+      titleCell.value = options.title;
+      Object.assign(titleCell, this.styles.titulo);
+      worksheet.getRow(1).height = 40;
+    }
+
+    const startRow = options.title ? 3 : 1;
+
+    // Headers
+    data.headers.forEach((header, index) => {
+      const cell = worksheet.getCell(startRow, index + 1);
+      cell.value = header.label;
+      Object.assign(cell, this.styles.encabezado);
+
+      // Configurar ancho de columna
+      worksheet.getColumn(index + 1).width = header.width || 15;
+
+      // Configurar tipo de dato
+      if (header.type) {
+        worksheet.getColumn(index + 1).numFmt = this.getNumberFormat(header.type);
+      }
+    });
+
+    // Altura de fila de encabezados
+    worksheet.getRow(startRow).height = 30;
+
+    // Datos
+    data.rows.forEach((row, rowIndex) => {
+      const currentRow = startRow + rowIndex + 1;
+
+      data.headers.forEach((header, colIndex) => {
+        const cell = worksheet.getCell(currentRow, colIndex + 1);
+        const value = row[header.key];
+
+        // Establecer valor
+        cell.value = value;
+
+        // Aplicar estilo según tipo
+        const style = this.getStyleByType(header.type);
+        Object.assign(cell, style);
+
+        // Formato condicional
+        if (header.conditional) {
+          this.applyConditionalFormat(cell, value, header.conditional);
+        }
+
+        // Hipervínculos
+        if (header.hyperlink && row[header.hyperlink]) {
+          cell.value = {
+            text: value,
+            hyperlink: row[header.hyperlink]
+          };
+          cell.font = { ...cell.font, color: { argb: 'FF667EEA' }, underline: true };
+        }
+      });
+
+      // Alternar colores de fila (zebra striping)
+      if (rowIndex % 2 === 0) {
+        worksheet.getRow(currentRow).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF9FAFB' }
+        };
+      }
+    });
+
+    // Agregar filtros automáticos
+    if (options.autoFilter !== false) {
+      worksheet.autoFilter = {
+        from: { row: startRow, column: 1 },
+        to: { row: startRow + data.rows.length, column: data.headers.length }
+      };
+    }
+
+    // Agregar totales si se especifican
+    if (options.totals) {
+      const totalRow = startRow + data.rows.length + 2;
+      worksheet.getCell(totalRow, 1).value = 'TOTALES';
+      worksheet.getCell(totalRow, 1).font = { bold: true };
+
+      options.totals.forEach(total => {
+        const colIndex = data.headers.findIndex(h => h.key === total.column) + 1;
+        if (colIndex > 0) {
+          const cell = worksheet.getCell(totalRow, colIndex);
+
+          if (total.type === 'sum') {
+            cell.value = { formula: `SUM(${this.getColumnLetter(colIndex)}${startRow + 1}:${this.getColumnLetter(colIndex)}${startRow + data.rows.length})` };
+          } else if (total.type === 'average') {
+            cell.value = { formula: `AVERAGE(${this.getColumnLetter(colIndex)}${startRow + 1}:${this.getColumnLetter(colIndex)}${startRow + data.rows.length})` };
+          } else if (total.type === 'count') {
+            cell.value = { formula: `COUNT(${this.getColumnLetter(colIndex)}${startRow + 1}:${this.getColumnLetter(colIndex)}${startRow + data.rows.length})` };
+          }
+
+          Object.assign(cell, this.styles.numero);
+          cell.font = { ...cell.font, bold: true };
+        }
+      });
+
+      // Aplicar borde superior a la fila de totales
+      for (let i = 1; i <= data.headers.length; i++) {
+        worksheet.getCell(totalRow, i).border = {
+          ...worksheet.getCell(totalRow, i).border,
+          top: { style: 'double', color: { argb: 'FF000000' } }
+        };
+      }
+    }
+
+    // Congelar paneles (freeze panes)
+    if (options.freezePanes !== false) {
+      worksheet.views = [{
+        state: 'frozen',
+        xSplit: options.freezeColumns || 0,
+        ySplit: startRow
+      }];
+    }
+
+    // Agregar comentarios si existen
+    if (options.comments) {
+      options.comments.forEach(comment => {
+        const cell = worksheet.getCell(comment.cell);
+        cell.note = {
+          texts: [{ text: comment.text }],
+          author: comment.author || 'Sistema'
+        };
+      });
+    }
+
+    // Proteger hoja si se especifica
+    if (options.protect) {
+      worksheet.protect(options.protect.password || '', {
+        selectLockedCells: true,
+        selectUnlockedCells: true,
+        formatCells: false,
+        formatColumns: false,
+        formatRows: false,
+        insertColumns: false,
+        insertRows: false,
+        deleteColumns: false,
+        deleteRows: false,
+        sort: true,
+        autoFilter: true
+      });
+    }
+
+    return worksheet;
+  }
+
+  /**
+   * Agregar hoja de gráfico (simulado con datos)
+   */
+  addChartSheet(name, chartData, options = {}) {
+    const worksheet = this.workbook.addWorksheet(name, {
+      properties: { tabColor: { argb: options.tabColor || 'FFF59E0B' } }
+    });
+
+    // Título
+    worksheet.mergeCells('A1:F1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = options.title || 'Análisis Gráfico';
+    Object.assign(titleCell, this.styles.titulo);
+    worksheet.getRow(1).height = 40;
+
+    // Datos del gráfico
+    let row = 3;
+
+    // Crear tabla de datos
+    chartData.labels.forEach((label, index) => {
+      worksheet.getCell(row + index, 1).value = label;
+      worksheet.getCell(row + index, 1).style = this.styles.celda;
+    });
+
+    chartData.datasets.forEach((dataset, datasetIndex) => {
+      // Header del dataset
+      const headerCell = worksheet.getCell(row - 1, datasetIndex + 2);
+      headerCell.value = dataset.label;
+      Object.assign(headerCell, this.styles.encabezado);
+
+      // Valores
+      dataset.data.forEach((value, valueIndex) => {
+        const cell = worksheet.getCell(row + valueIndex, datasetIndex + 2);
+        cell.value = value;
+        cell.style = this.styles.numero;
+
+        // Aplicar formato condicional con barras de datos
+        if (options.dataBars) {
+          this.addDataBar(worksheet, cell, dataset.data);
+        }
+      });
+    });
+
+    // Agregar sparklines (mini gráficos usando caracteres)
+    if (options.sparklines) {
+      const sparklineCol = chartData.datasets.length + 3;
+      worksheet.getCell(row - 1, sparklineCol).value = 'Tendencia';
+      Object.assign(worksheet.getCell(row - 1, sparklineCol), this.styles.encabezado);
+
+      chartData.labels.forEach((label, index) => {
+        const values = chartData.datasets.map(d => d.data[index]);
+        const sparkline = this.crearMiniGrafico(values);
+        worksheet.getCell(row + index, sparklineCol).value = sparkline;
+        worksheet.getCell(row + index, sparklineCol).font = { name: 'Courier New' };
+      });
+    }
+
+    // Resumen estadístico
+    if (options.statistics) {
+      row = row + chartData.labels.length + 3;
+      worksheet.getCell(row, 1).value = 'Estadísticas';
+      worksheet.getCell(row, 1).font = { size: 12, bold: true };
+      row++;
+
+      chartData.datasets.forEach((dataset, index) => {
+        const stats = this.calculateStatistics(dataset.data);
+
+        worksheet.getCell(row, 1).value = dataset.label;
+        worksheet.getCell(row + 1, 1).value = 'Promedio:';
+        worksheet.getCell(row + 1, 2).value = stats.average;
+        worksheet.getCell(row + 2, 1).value = 'Mínimo:';
+        worksheet.getCell(row + 2, 2).value = stats.min;
+        worksheet.getCell(row + 3, 1).value = 'Máximo:';
+        worksheet.getCell(row + 3, 2).value = stats.max;
+        worksheet.getCell(row + 4, 1).value = 'Total:';
+        worksheet.getCell(row + 4, 2).value = stats.sum;
+
+        // Aplicar estilos
+        for (let i = 0; i < 5; i++) {
+          worksheet.getCell(row + i, 2).style = this.styles.numero;
+        }
+
+        row += 6;
+      });
+    }
+
+    return worksheet;
+  }
+
+  /**
+   * Agregar logo a una hoja
+   */
+  async addLogo(worksheet, position = 'A1') {
+    // Por ahora, agregamos un texto como placeholder
+    // En producción, se usaría worksheet.addImage()
+    const logoCell = worksheet.getCell(position);
+    logoCell.value = 'UNIMET';
+    logoCell.font = { size: 24, bold: true, color: { argb: 'FF667EEA' } };
+    logoCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  }
+
+  /**
+   * Guardar el libro como buffer
+   */
+  async saveAsBuffer() {
+    if (!this.workbook) {
+      throw new Error('No hay libro de Excel creado');
+    }
+    return await this.workbook.xlsx.writeBuffer();
+  }
+
+  /**
+   * Guardar el libro en un archivo
+   */
+  async saveToFile(filepath) {
+    if (!this.workbook) {
+      throw new Error('No hay libro de Excel creado');
+    }
+    await this.workbook.xlsx.writeFile(filepath);
+  }
+
+  // ========== UTILIDADES ==========
+
+  getAllBorders(color) {
+    return {
+      top: { style: 'thin', color: { argb: color } },
+      left: { style: 'thin', color: { argb: color } },
+      bottom: { style: 'thin', color: { argb: color } },
+      right: { style: 'thin', color: { argb: color } }
+    };
+  }
+
+  getColumnLetter(columnNumber) {
+    let letter = '';
+    while (columnNumber > 0) {
+      let remainder = (columnNumber - 1) % 26;
+      letter = String.fromCharCode(65 + remainder) + letter;
+      columnNumber = Math.floor((columnNumber - 1) / 26);
+    }
+    return letter;
+  }
+
+  getNumberFormat(type) {
+    const formats = {
+      number: '#,##0',
+      decimal: '#,##0.00',
+      percent: '0.00%',
+      currency: '"$"#,##0.00',
+      date: 'dd/mm/yyyy',
+      datetime: 'dd/mm/yyyy hh:mm',
+      time: 'hh:mm:ss'
+    };
+    return formats[type] || '#,##0';
+  }
+
+  getStyleByType(type) {
+    const styleMap = {
+      number: this.styles.numero,
+      decimal: this.styles.decimal,
+      percent: this.styles.porcentaje,
+      currency: this.styles.moneda,
+      date: this.styles.fecha,
+      datetime: this.styles.fechaHora,
+      text: this.styles.celda
+    };
+    return styleMap[type] || this.styles.celda;
+  }
+
+  getColorBySemaforo(semaforo) {
+    switch (semaforo) {
+      case 'verde': return 'FF10B981';
+      case 'amarillo': return 'FFF59E0B';
+      case 'rojo': return 'FFEF4444';
+      default: return 'FF6B7280';
+    }
+  }
+
+  formatearValor(valor, formato) {
+    switch (formato) {
+      case 'numero':
+        return typeof valor === 'number' ? valor : parseInt(valor) || 0;
+      case 'porcentaje':
+        return typeof valor === 'number' ? valor / 100 : parseFloat(valor) / 100 || 0;
+      case 'moneda':
+        return typeof valor === 'number' ? valor : parseFloat(valor) || 0;
+      default:
+        return valor;
+    }
+  }
+
+  applyCardBorder(worksheet, startRow, startCol, endRow, endCol) {
+    for (let row = startRow; row <= endRow; row++) {
+      for (let col = startCol; col <= endCol; col++) {
+        const cell = worksheet.getCell(row, col);
+        cell.border = {
+          top: row === startRow ? { style: 'medium', color: { argb: 'FFE5E7EB' } } : undefined,
+          left: col === startCol ? { style: 'medium', color: { argb: 'FFE5E7EB' } } : undefined,
+          bottom: row === endRow ? { style: 'medium', color: { argb: 'FFE5E7EB' } } : undefined,
+          right: col === endCol ? { style: 'medium', color: { argb: 'FFE5E7EB' } } : undefined
+        };
+
+        // Fondo suave
+        if (!cell.fill || cell.fill.type !== 'pattern') {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFBFCFD' }
+          };
+        }
+      }
+    }
+  }
+
+  applyConditionalFormat(cell, value, conditions) {
+    conditions.forEach(condition => {
+      let applies = false;
+
+      switch (condition.operator) {
+        case '>':
+          applies = value > condition.value;
+          break;
+        case '>=':
+          applies = value >= condition.value;
+          break;
+        case '<':
+          applies = value < condition.value;
+          break;
+        case '<=':
+          applies = value <= condition.value;
+          break;
+        case '==':
+          applies = value == condition.value;
+          break;
+        case '!=':
+          applies = value != condition.value;
+          break;
+      }
+
+      if (applies) {
+        if (condition.backgroundColor) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: condition.backgroundColor }
+          };
+        }
+        if (condition.fontColor) {
+          cell.font = { ...cell.font, color: { argb: condition.fontColor } };
+        }
+        if (condition.bold) {
+          cell.font = { ...cell.font, bold: true };
+        }
+      }
+    });
+  }
+
+  addDataBar(worksheet, cell, allValues) {
+    const value = cell.value;
+    const max = Math.max(...allValues);
+    const percentage = (value / max) * 100;
+
+    // Crear barra usando caracteres Unicode
+    const barLength = Math.round(percentage / 10);
+    const bar = '█'.repeat(barLength) + '░'.repeat(10 - barLength);
+
+    // Agregar la barra como comentario o en celda adyacente
+    cell.note = {
+      texts: [{ text: `${percentage.toFixed(1)}%\n${bar}` }]
+    };
+  }
+
+  crearMiniGrafico(valores) {
+    if (!valores || valores.length === 0) return '';
+
+    const max = Math.max(...valores);
+    const min = Math.min(...valores);
+    const range = max - min || 1;
+
+    const caracteres = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+    return valores.map(v => {
+      const indice = Math.round(((v - min) / range) * 7);
+      return caracteres[Math.min(Math.max(indice, 0), 7)];
+    }).join('');
+  }
+
+  calculateStatistics(data) {
+    const sum = data.reduce((a, b) => a + b, 0);
+    const average = sum / data.length;
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+
+    return {
+      sum: sum,
+      average: average.toFixed(2),
+      min: min,
+      max: max,
+      count: data.length
+    };
+  }
+
+  /**
+   * Crear un dashboard en Excel con múltiples widgets
+   */
+  async createDashboard(dashboardData) {
+    this.createWorkbook(dashboardData.metadata);
+
+    // Hoja de índice
+    if (dashboardData.includeIndex !== false) {
+      this.addIndexSheet(dashboardData.sheets || []);
+    }
+
+    // Resumen ejecutivo
+    if (dashboardData.resumenEjecutivo) {
+      this.addResumenEjecutivo(dashboardData.resumenEjecutivo);
+    }
+
+    // Hojas de datos
+    if (dashboardData.dataSheets) {
+      dashboardData.dataSheets.forEach(sheet => {
+        this.addDataSheet(sheet.name, sheet.data, sheet.options);
+      });
+    }
+
+    // Hojas de gráficos
+    if (dashboardData.chartSheets) {
+      dashboardData.chartSheets.forEach(chart => {
+        this.addChartSheet(chart.name, chart.data, chart.options);
+      });
+    }
+
+    // Retornar como buffer
+    return await this.saveAsBuffer();
+  }
+}
+
+module.exports = new ExcelEnhanced();

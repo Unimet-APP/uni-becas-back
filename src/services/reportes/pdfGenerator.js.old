@@ -1,0 +1,658 @@
+const puppeteer = require('puppeteer');
+const handlebars = require('handlebars');
+const fs = require('fs').promises;
+const path = require('path');
+const moment = require('moment');
+const numeral = require('numeral');
+
+// Configurar idioma español para moment
+moment.locale('es');
+
+// Registrar helpers de Handlebars para formateo
+handlebars.registerHelper('formatNumber', (number) => {
+  return numeral(number).format('0,0');
+});
+
+handlebars.registerHelper('formatDecimal', (number) => {
+  return numeral(number).format('0,0.00');
+});
+
+handlebars.registerHelper('formatPercent', (number) => {
+  return numeral(number / 100).format('0.0%');
+});
+
+handlebars.registerHelper('formatCurrency', (number) => {
+  return numeral(number).format('$0,0.00');
+});
+
+handlebars.registerHelper('formatDate', (date) => {
+  return moment(date).format('DD [de] MMMM [de] YYYY');
+});
+
+handlebars.registerHelper('formatDateTime', (date) => {
+  return moment(date).format('DD/MM/YYYY HH:mm');
+});
+
+handlebars.registerHelper('semaforo', (value, min, max) => {
+  if (value >= max) return 'verde';
+  if (value >= min) return 'amarillo';
+  return 'rojo';
+});
+
+handlebars.registerHelper('cambioIcono', (value) => {
+  if (value > 0) return '↑';
+  if (value < 0) return '↓';
+  return '=';
+});
+
+handlebars.registerHelper('ifEquals', function(arg1, arg2, options) {
+  return (arg1 == arg2) ? options.fn(this) : options.inverse(this);
+});
+
+// Helpers de comparación para condicionales
+handlebars.registerHelper('gt', (a, b) => a > b);
+handlebars.registerHelper('gte', (a, b) => a >= b);
+handlebars.registerHelper('lt', (a, b) => a < b);
+handlebars.registerHelper('lte', (a, b) => a <= b);
+handlebars.registerHelper('eq', (a, b) => a == b);
+handlebars.registerHelper('ne', (a, b) => a != b);
+
+// Helpers matemáticos
+handlebars.registerHelper('divide', (a, b) => b !== 0 ? a / b : 0);
+handlebars.registerHelper('multiply', (a, b) => a * b);
+handlebars.registerHelper('add', (a, b) => a + b);
+handlebars.registerHelper('subtract', (a, b) => a - b);
+handlebars.registerHelper('abs', (a) => Math.abs(a));
+
+// Helper para obtener longitud de arrays
+handlebars.registerHelper('length', (arr) => {
+  if (!arr) return 0;
+  return Array.isArray(arr) ? arr.length : 0;
+});
+
+handlebars.registerHelper('json', function(context) {
+  return JSON.stringify(context);
+});
+
+class PDFGenerator {
+  constructor() {
+    this.browser = null;
+    this.templatesPath = path.join(__dirname, '../../templates/reportes');
+    this.assetsPath = path.join(__dirname, '../../assets');
+  }
+
+  /**
+   * Inicializar navegador Puppeteer
+   */
+  async initBrowser() {
+    if (!this.browser) {
+      this.browser = await puppeteer.launch({
+        headless: 'new',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ]
+      });
+    }
+    return this.browser;
+  }
+
+  /**
+   * Cerrar navegador
+   */
+  async closeBrowser() {
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
+    }
+  }
+
+  /**
+   * Cargar plantilla Handlebars
+   */
+  async loadTemplate(templateName) {
+    const templatePath = path.join(this.templatesPath, `${templateName}.hbs`);
+    const templateContent = await fs.readFile(templatePath, 'utf-8');
+
+    // Configurar opciones para permitir acceso a propiedades de Sequelize
+    return handlebars.compile(templateContent, {
+      allowProtoPropertiesByDefault: true,
+      allowProtoMethodsByDefault: true
+    });
+  }
+
+  /**
+   * Cargar estilos CSS
+   */
+  async loadStyles() {
+    const cssPath = path.join(this.assetsPath, 'styles', 'reportes.css');
+    try {
+      return await fs.readFile(cssPath, 'utf-8');
+    } catch (error) {
+      // Si no existe el archivo CSS, usar estilos por defecto
+      return this.getDefaultStyles();
+    }
+  }
+
+  /**
+   * Obtener logo de la universidad en base64
+   */
+  async getLogoBase64() {
+    // Intentar primero con SVG
+    const logoSvgPath = path.join(this.assetsPath, 'images', 'logo-unimet.svg');
+    try {
+      const logoBuffer = await fs.readFile(logoSvgPath);
+      return `data:image/svg+xml;base64,${logoBuffer.toString('base64')}`;
+    } catch (svgError) {
+      // Si no existe SVG, intentar PNG
+      const logoPngPath = path.join(this.assetsPath, 'images', 'logo-unimet.png');
+      try {
+        const logoBuffer = await fs.readFile(logoPngPath);
+        return `data:image/png;base64,${logoBuffer.toString('base64')}`;
+      } catch (error) {
+        // Si no existe el logo, usar un placeholder
+        return 'data:image/svg+xml;base64,' + Buffer.from(this.getPlaceholderLogo()).toString('base64');
+      }
+    }
+  }
+
+  /**
+   * Generar PDF desde datos y template
+   */
+  async generatePDF(templateName, data, options = {}) {
+    const browser = await this.initBrowser();
+    const page = await browser.newPage();
+
+    // Aumentar timeout a 90 segundos para PDFs complejos
+    page.setDefaultNavigationTimeout(90000);
+    page.setDefaultTimeout(90000);
+
+    try {
+      // Cargar template y estilos
+      const template = await this.loadTemplate(templateName);
+      const styles = await this.loadStyles();
+      const logo = await this.getLogoBase64();
+
+      // Preparar datos con información adicional
+      const enhancedData = {
+        ...data,
+        logo,
+        fechaGeneracion: moment().format('DD [de] MMMM [de] YYYY'),
+        horaGeneracion: moment().format('HH:mm'),
+        universidad: 'Universidad Metropolitana',
+        sistema: 'Sistema de Gestión de Becas',
+        ...options.additionalData
+      };
+
+      // Generar HTML con opciones runtime para permitir propiedades de Sequelize
+      const html = template(enhancedData, {
+        allowProtoPropertiesByDefault: true,
+        allowProtoMethodsByDefault: true
+      });
+
+      // Crear HTML completo con estilos
+      const fullHTML = `
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${options.title || 'Reporte de Becas'}</title>
+          <style>${styles}</style>
+        </head>
+        <body>
+          ${html}
+        </body>
+        </html>
+      `;
+
+      // Establecer contenido en la página
+      await page.setContent(fullHTML, {
+        waitUntil: 'domcontentloaded'
+      });
+
+      // Configurar opciones de PDF
+      const pdfOptions = {
+        format: options.format || 'A4',
+        printBackground: true,
+        margin: options.margin || {
+          top: '20mm',
+          right: '15mm',
+          bottom: '20mm',
+          left: '15mm'
+        },
+        displayHeaderFooter: options.headerFooter !== false,
+        headerTemplate: options.headerTemplate || this.getDefaultHeader(),
+        footerTemplate: options.footerTemplate || this.getDefaultFooter(),
+        preferCSSPageSize: false
+      };
+
+      // Generar PDF
+      const pdfBuffer = await page.pdf(pdfOptions);
+
+      return pdfBuffer;
+    } finally {
+      await page.close();
+    }
+  }
+
+  /**
+   * Generar múltiples PDFs en lote
+   */
+  async generateBatchPDFs(reports) {
+    const results = [];
+    const browser = await this.initBrowser();
+
+    try {
+      for (const report of reports) {
+        const pdf = await this.generatePDF(
+          report.template,
+          report.data,
+          report.options
+        );
+        results.push({
+          name: report.name,
+          pdf
+        });
+      }
+      return results;
+    } finally {
+      await this.closeBrowser();
+    }
+  }
+
+  /**
+   * Estilos CSS por defecto
+   */
+  getDefaultStyles() {
+    return `
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        line-height: 1.6;
+        color: #1f2937;
+        background: white !important;
+      }
+
+      /* Portada */
+      .portada {
+        page-break-after: always;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        background: white !important;
+        color: #1f2937;
+        padding: 2rem;
+        border-top: 8px solid #FF6600;
+        border-bottom: 8px solid #FF6600;
+      }
+
+      .portada h1 {
+        font-size: 3rem;
+        font-weight: 700;
+        margin: 2rem 0;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: #FF6600;
+      }
+
+      .portada h2 {
+        font-size: 1.5rem;
+        font-weight: 400;
+        margin: 1rem 0;
+        color: #1f2937;
+      }
+
+      .portada .logo {
+        width: 400px;
+        height: auto;
+        margin-bottom: 2rem;
+      }
+
+      .portada .fecha {
+        margin-top: 2rem;
+        font-size: 1.1rem;
+        color: #64748b;
+      }
+
+      /* Secciones */
+      .seccion {
+        page-break-inside: avoid;
+        margin: 2rem 0;
+      }
+
+      h2 {
+        color: #FF6600;
+        font-size: 1.75rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 3px solid #FF6600;
+      }
+
+      h3 {
+        color: #2d3748;
+        font-size: 1.25rem;
+        font-weight: 500;
+        margin: 1.5rem 0 1rem;
+      }
+
+      /* KPI Cards */
+      .kpi-container {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin: 1.5rem 0;
+        flex-wrap: wrap;
+      }
+
+      .kpi-card {
+        flex: 1;
+        min-width: 150px;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        background: white;
+        border: 2px solid #FFE5CC;
+      }
+
+      .kpi-card.semaforo-verde {
+        border-color: #10b981;
+        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+      }
+
+      .kpi-card.semaforo-amarillo {
+        border-color: #f59e0b;
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+      }
+
+      .kpi-card.semaforo-rojo {
+        border-color: #ef4444;
+        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+      }
+
+      .kpi-card h4 {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        margin-bottom: 0.5rem;
+      }
+
+      .kpi-card .valor {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #FF6600;
+        margin: 0.5rem 0;
+      }
+
+      .kpi-card .meta {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        margin-top: 0.25rem;
+      }
+
+      .kpi-card .cambio {
+        font-size: 1rem;
+        color: #475569;
+      }
+
+      .kpi-card .cambio.positivo {
+        color: #10b981;
+      }
+
+      .kpi-card .cambio.negativo {
+        color: #ef4444;
+      }
+
+      /* Tablas */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.5rem 0;
+        font-size: 0.875rem;
+      }
+
+      thead {
+        background: linear-gradient(135deg, #FF6600 0%, #CC5200 100%);
+        color: white;
+      }
+
+      th {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.75rem;
+      }
+
+      td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      tbody tr:hover {
+        background-color: #f8fafc;
+      }
+
+      tbody tr:nth-child(even) {
+        background-color: #f1f5f9;
+      }
+
+      /* Gráficos */
+      .grafico-container {
+        margin: 2rem 0;
+        text-align: center;
+        page-break-inside: avoid;
+      }
+
+      .grafico-container img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .grafico-titulo {
+        font-size: 1rem;
+        color: #64748b;
+        margin-top: 0.5rem;
+        font-style: italic;
+      }
+
+      /* Insights y Recomendaciones */
+      .insights {
+        background: linear-gradient(135deg, #FFF5EB 0%, #FFE5CC 100%);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 2rem 0;
+        border: 2px solid #FF6600;
+      }
+
+      .insights h3 {
+        color: #CC5200;
+        margin-bottom: 1rem;
+      }
+
+      .insights ul {
+        list-style: none;
+        padding: 0;
+      }
+
+      .insights li {
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+        background: white;
+        border-radius: 8px;
+        border-left: 4px solid #FF6600;
+      }
+
+      /* Alertas */
+      .alerta {
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+        border-left: 4px solid;
+      }
+
+      .alerta.info {
+        background: #dbeafe;
+        border-color: #3b82f6;
+        color: #1e40af;
+      }
+
+      .alerta.warning {
+        background: #fed7aa;
+        border-color: #fb923c;
+        color: #c2410c;
+      }
+
+      .alerta.error {
+        background: #fecaca;
+        border-color: #f87171;
+        color: #b91c1c;
+      }
+
+      .alerta.success {
+        background: #bbf7d0;
+        border-color: #4ade80;
+        color: #15803d;
+      }
+
+      /* Dashboard Grid */
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.5rem;
+        margin: 2rem 0;
+      }
+
+      .dashboard-widget {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e2e8f0;
+      }
+
+      /* Progress Bars */
+      .progress-bar {
+        width: 100%;
+        height: 24px;
+        background: #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        margin: 0.5rem 0;
+      }
+
+      .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #FF6600 0%, #CC5200 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.75rem;
+        font-weight: 600;
+        transition: width 0.3s ease;
+      }
+
+      .progress-bar-fill.success {
+        background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+      }
+
+      .progress-bar-fill.warning {
+        background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+      }
+
+      .progress-bar-fill.danger {
+        background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+      }
+
+      /* Footer y Header */
+      .page-footer {
+        width: 100%;
+        text-align: center;
+        font-size: 0.75rem;
+        color: #94a3b8;
+        padding: 1rem 0.5rem;
+        margin-top: 2rem;
+        border-top: 2px solid #FFE5CC;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .page-footer p {
+        margin: 0.25rem 0;
+      }
+
+      @media print {
+        .no-print {
+          display: none;
+        }
+
+        .page-break {
+          page-break-after: always;
+        }
+      }
+    `;
+  }
+
+  /**
+   * Header por defecto para PDF
+   */
+  getDefaultHeader() {
+    return `
+      <div style="width: 100%; font-size: 10px; padding: 10px 20px; color: #64748b;">
+        <span style="float: left;">Sistema de Gestión de Becas</span>
+        <span style="float: right;">Universidad Metropolitana</span>
+      </div>
+    `;
+  }
+
+  /**
+   * Footer por defecto para PDF
+   */
+  getDefaultFooter() {
+    return `
+      <div style="width: 100%; font-size: 10px; padding: 10px 20px; color: #64748b; text-align: center;">
+        <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
+        <span style="margin-left: 20px;">Generado el <span class="date"></span></span>
+      </div>
+    `;
+  }
+
+  /**
+   * Logo placeholder SVG
+   */
+  getPlaceholderLogo() {
+    return `
+      <svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="200" height="100" fill="#667eea"/>
+        <text x="100" y="50" font-family="Arial" font-size="24" fill="white" text-anchor="middle" dominant-baseline="middle">
+          UNIMET
+        </text>
+      </svg>
+    `;
+  }
+}
+
+module.exports = new PDFGenerator();

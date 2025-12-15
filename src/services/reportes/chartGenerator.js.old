@@ -1,0 +1,735 @@
+const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
+const Chart = require('chart.js/auto');
+
+class ChartGenerator {
+  constructor() {
+    // Configurar renderizador con tamaño por defecto
+    this.width = 800;
+    this.height = 600;
+    this.chartJSNodeCanvas = new ChartJSNodeCanvas({
+      width: this.width,
+      height: this.height,
+      backgroundColour: 'white'
+    });
+
+    // Paleta de colores institucional
+    this.colors = {
+      primary: '#667eea',
+      secondary: '#764ba2',
+      success: '#10b981',
+      warning: '#f59e0b',
+      danger: '#ef4444',
+      info: '#3b82f6',
+      gradient1: ['#667eea', '#764ba2'],
+      gradient2: ['#f093fb', '#f5576c'],
+      gradient3: ['#4facfe', '#00f2fe'],
+      gradient4: ['#43e97b', '#38f9d7'],
+      palette: [
+        '#667eea',
+        '#764ba2',
+        '#10b981',
+        '#f59e0b',
+        '#ef4444',
+        '#3b82f6',
+        '#8b5cf6',
+        '#ec4899',
+        '#14b8a6',
+        '#f97316'
+      ]
+    };
+
+    // Configuración global de Chart.js
+    this.defaultOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            font: {
+              family: "'Inter', sans-serif",
+              size: 12,
+              weight: 500
+            },
+            padding: 15
+          }
+        },
+        title: {
+          display: true,
+          font: {
+            family: "'Inter', sans-serif",
+            size: 16,
+            weight: 600
+          },
+          padding: {
+            top: 10,
+            bottom: 30
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          titleFont: {
+            size: 13,
+            weight: 600
+          },
+          bodyFont: {
+            size: 12
+          },
+          padding: 10,
+          cornerRadius: 8
+        }
+      }
+    };
+  }
+
+  /**
+   * Crear gráfico de barras
+   */
+  async createBarChart(data, options = {}) {
+    const configuration = {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: data.datasets.map((dataset, index) => ({
+          ...dataset,
+          backgroundColor: options.useGradient
+            ? this.createGradient('vertical', this.colors.gradient1)
+            : this.colors.palette[index % this.colors.palette.length],
+          borderColor: this.colors.palette[index % this.colors.palette.length],
+          borderWidth: 2,
+          borderRadius: 4,
+          barThickness: options.barThickness || 'flex',
+          maxBarThickness: options.maxBarThickness || 50
+        }))
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: {
+              color: 'rgba(0, 0, 0, 0.05)',
+              drawBorder: false
+            },
+            ticks: {
+              font: {
+                family: "'Inter', sans-serif",
+                size: 11
+              },
+              callback: function(value) {
+                if (options.formatAsPercent) {
+                  return value + '%';
+                }
+                if (options.formatAsCurrency) {
+                  return '$' + value.toLocaleString();
+                }
+                return value.toLocaleString();
+              }
+            }
+          },
+          x: {
+            grid: {
+              display: false
+            },
+            ticks: {
+              font: {
+                family: "'Inter', sans-serif",
+                size: 11
+              }
+            }
+          }
+        }
+      }
+    };
+
+    if (options.horizontal) {
+      configuration.type = 'bar';
+      configuration.options.indexAxis = 'y';
+    }
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Crear gráfico de líneas
+   */
+  async createLineChart(data, options = {}) {
+    const configuration = {
+      type: 'line',
+      data: {
+        labels: data.labels,
+        datasets: data.datasets.map((dataset, index) => ({
+          ...dataset,
+          borderColor: this.colors.palette[index % this.colors.palette.length],
+          backgroundColor: options.fillArea
+            ? this.colors.palette[index % this.colors.palette.length] + '20'
+            : 'transparent',
+          borderWidth: 3,
+          tension: options.smooth ? 0.4 : 0,
+          pointBackgroundColor: this.colors.palette[index % this.colors.palette.length],
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: options.fillArea || false
+        }))
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        scales: {
+          y: {
+            beginAtZero: options.beginAtZero !== false,
+            grid: {
+              color: 'rgba(0, 0, 0, 0.05)',
+              drawBorder: false
+            },
+            ticks: {
+              font: {
+                family: "'Inter', sans-serif",
+                size: 11
+              },
+              callback: function(value) {
+                if (options.formatAsPercent) {
+                  return value + '%';
+                }
+                if (options.formatAsCurrency) {
+                  return '$' + value.toLocaleString();
+                }
+                return value.toLocaleString();
+              }
+            }
+          },
+          x: {
+            grid: {
+              color: 'rgba(0, 0, 0, 0.05)',
+              drawBorder: false
+            },
+            ticks: {
+              font: {
+                family: "'Inter', sans-serif",
+                size: 11
+              }
+            }
+          }
+        }
+      }
+    };
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Crear gráfico de pastel/dona
+   */
+  async createPieChart(data, options = {}) {
+    const configuration = {
+      type: options.doughnut ? 'doughnut' : 'pie',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          ...data.dataset,
+          backgroundColor: data.dataset.backgroundColor || this.colors.palette,
+          borderColor: '#fff',
+          borderWidth: 2,
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        plugins: {
+          ...this.defaultOptions.plugins,
+          ...options.plugins,
+          legend: {
+            ...this.defaultOptions.plugins.legend,
+            position: options.legendPosition || 'right'
+          },
+          datalabels: {
+            color: '#fff',
+            font: {
+              weight: 'bold',
+              size: 14
+            },
+            formatter: (value, ctx) => {
+              const sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const percentage = ((value * 100) / sum).toFixed(1);
+              return percentage + '%';
+            }
+          }
+        }
+      }
+    };
+
+    if (options.doughnut) {
+      configuration.options.cutout = options.cutout || '50%';
+    }
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Crear gráfico de radar
+   */
+  async createRadarChart(data, options = {}) {
+    const configuration = {
+      type: 'radar',
+      data: {
+        labels: data.labels,
+        datasets: data.datasets.map((dataset, index) => ({
+          ...dataset,
+          borderColor: this.colors.palette[index % this.colors.palette.length],
+          backgroundColor: this.colors.palette[index % this.colors.palette.length] + '40',
+          borderWidth: 2,
+          pointBackgroundColor: this.colors.palette[index % this.colors.palette.length],
+          pointBorderColor: '#fff',
+          pointHoverBackgroundColor: '#fff',
+          pointHoverBorderColor: this.colors.palette[index % this.colors.palette.length]
+        }))
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        scales: {
+          r: {
+            beginAtZero: true,
+            grid: {
+              color: 'rgba(0, 0, 0, 0.1)'
+            },
+            ticks: {
+              font: {
+                size: 10
+              }
+            },
+            pointLabels: {
+              font: {
+                family: "'Inter', sans-serif",
+                size: 12,
+                weight: 500
+              }
+            }
+          }
+        }
+      }
+    };
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Crear gráfico de área polar
+   */
+  async createPolarAreaChart(data, options = {}) {
+    const configuration = {
+      type: 'polarArea',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          ...data.dataset,
+          backgroundColor: this.colors.palette.map(color => color + '80'),
+          borderColor: this.colors.palette,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        scales: {
+          r: {
+            beginAtZero: true,
+            grid: {
+              color: 'rgba(0, 0, 0, 0.1)'
+            },
+            ticks: {
+              font: {
+                size: 10
+              }
+            }
+          }
+        }
+      }
+    };
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Crear gráfico de dispersión (scatter)
+   */
+  async createScatterChart(data, options = {}) {
+    const configuration = {
+      type: 'scatter',
+      data: {
+        datasets: data.datasets.map((dataset, index) => ({
+          ...dataset,
+          backgroundColor: this.colors.palette[index % this.colors.palette.length],
+          borderColor: this.colors.palette[index % this.colors.palette.length],
+          borderWidth: 1
+        }))
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        scales: {
+          y: {
+            beginAtZero: options.beginAtZero !== false,
+            grid: {
+              color: 'rgba(0, 0, 0, 0.05)'
+            },
+            title: {
+              display: true,
+              text: options.yAxisLabel || 'Y Axis'
+            }
+          },
+          x: {
+            grid: {
+              color: 'rgba(0, 0, 0, 0.05)'
+            },
+            title: {
+              display: true,
+              text: options.xAxisLabel || 'X Axis'
+            }
+          }
+        }
+      }
+    };
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Crear gráfico mixto (barras y líneas)
+   */
+  async createMixedChart(data, options = {}) {
+    const configuration = {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: data.datasets.map((dataset, index) => {
+          if (dataset.type === 'line') {
+            return {
+              ...dataset,
+              borderColor: this.colors.palette[index % this.colors.palette.length],
+              backgroundColor: 'transparent',
+              borderWidth: 3,
+              tension: 0.4,
+              yAxisID: dataset.yAxisID || 'y'
+            };
+          } else {
+            return {
+              ...dataset,
+              backgroundColor: this.colors.palette[index % this.colors.palette.length] + '80',
+              borderColor: this.colors.palette[index % this.colors.palette.length],
+              borderWidth: 2,
+              borderRadius: 4,
+              yAxisID: dataset.yAxisID || 'y'
+            };
+          }
+        })
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        scales: {
+          y: {
+            beginAtZero: true,
+            position: 'left',
+            grid: {
+              color: 'rgba(0, 0, 0, 0.05)'
+            }
+          },
+          y1: options.dualAxis ? {
+            beginAtZero: true,
+            position: 'right',
+            grid: {
+              drawOnChartArea: false
+            }
+          } : undefined
+        }
+      }
+    };
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Crear mapa de calor (usando matriz de datos)
+   */
+  async createHeatmap(data, options = {}) {
+    // Para un mapa de calor real, necesitaríamos una librería adicional
+    // Por ahora, usamos un gráfico de burbujas como aproximación
+
+    // Manejar tanto 'values' (inglés) como 'valores' (español) para compatibilidad
+    const values = data.values || data.valores || [];
+
+    const configuration = {
+      type: 'bubble',
+      data: {
+        datasets: [{
+          label: data.label || 'Heatmap',
+          data: values.map((row, y) =>
+            row.map((value, x) => ({
+              x: x,
+              y: y,
+              r: Math.abs(value) * 5,
+              v: value
+            }))
+          ).flat(),
+          backgroundColor: (context) => {
+            const value = context.raw.v;
+            const max = Math.max(...values.flat());
+            const min = Math.min(...values.flat());
+            const normalized = (value - min) / (max - min);
+            const r = Math.floor(255 * normalized);
+            const b = Math.floor(255 * (1 - normalized));
+            return `rgba(${r}, 100, ${b}, 0.7)`;
+          }
+        }]
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        scales: {
+          y: {
+            ticks: {
+              callback: (value) => data.yLabels ? data.yLabels[value] : value
+            }
+          },
+          x: {
+            ticks: {
+              callback: (value) => data.xLabels ? data.xLabels[value] : value
+            }
+          }
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                return `Valor: ${context.raw.v}`;
+              }
+            }
+          }
+        }
+      }
+    };
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Crear gráfico de gauge (velocímetro)
+   */
+  async createGaugeChart(value, options = {}) {
+    const max = options.max || 100;
+    const percentage = (value / max) * 100;
+
+    let color;
+    if (percentage >= 80) color = this.colors.success;
+    else if (percentage >= 50) color = this.colors.warning;
+    else color = this.colors.danger;
+
+    const configuration = {
+      type: 'doughnut',
+      data: {
+        datasets: [{
+          data: [value, max - value],
+          backgroundColor: [color, '#e2e8f0'],
+          borderWidth: 0,
+          circumference: 180,
+          rotation: 270
+        }]
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        cutout: '75%',
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            enabled: false
+          },
+          title: {
+            display: true,
+            text: options.title || 'Gauge',
+            font: {
+              size: 20,
+              weight: 600
+            }
+          }
+        }
+      },
+      plugins: [{
+        id: 'text',
+        beforeDraw: (chart) => {
+          const ctx = chart.ctx;
+          ctx.save();
+          const centerX = chart.width / 2;
+          const centerY = chart.height / 2;
+
+          // Valor principal
+          ctx.font = 'bold 36px Inter';
+          ctx.fillStyle = color;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`${value}`, centerX, centerY - 10);
+
+          // Etiqueta
+          ctx.font = '16px Inter';
+          ctx.fillStyle = '#64748b';
+          ctx.fillText(options.label || `de ${max}`, centerX, centerY + 20);
+
+          ctx.restore();
+        }
+      }]
+    };
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Crear gráfico de progreso (progress bar como gráfico)
+   */
+  async createProgressChart(data, options = {}) {
+    const configuration = {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          label: 'Completado',
+          data: data.values,
+          backgroundColor: data.values.map(v => {
+            if (v >= 80) return this.colors.success;
+            if (v >= 50) return this.colors.warning;
+            return this.colors.danger;
+          }),
+          borderWidth: 0,
+          borderRadius: 8,
+          barPercentage: 0.5
+        }]
+      },
+      options: {
+        ...this.defaultOptions,
+        ...options,
+        indexAxis: 'y',
+        scales: {
+          x: {
+            beginAtZero: true,
+            max: 100,
+            ticks: {
+              callback: (value) => value + '%'
+            }
+          },
+          y: {
+            grid: {
+              display: false
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            display: false
+          },
+          datalabels: {
+            anchor: 'end',
+            align: 'end',
+            formatter: (value) => value + '%',
+            font: {
+              weight: 'bold'
+            }
+          }
+        }
+      }
+    };
+
+    return await this.renderChart(configuration, options);
+  }
+
+  /**
+   * Renderizar gráfico y retornar como base64
+   */
+  async renderChart(configuration, options = {}) {
+    const width = options.width || this.width;
+    const height = options.height || this.height;
+
+    const chartJSNodeCanvas = new ChartJSNodeCanvas({
+      width,
+      height,
+      backgroundColour: options.backgroundColor || 'white'
+    });
+
+    const buffer = await chartJSNodeCanvas.renderToBuffer(configuration);
+    return `data:image/png;base64,${buffer.toString('base64')}`;
+  }
+
+  /**
+   * Crear gradiente (simulado para node-canvas)
+   */
+  createGradient(direction, colors) {
+    // En node-canvas no podemos crear gradientes reales
+    // Retornamos el primer color como fallback
+    return colors[0];
+  }
+
+  /**
+   * Generar múltiples gráficos en lote
+   */
+  async generateBatchCharts(charts) {
+    const results = [];
+
+    for (const chart of charts) {
+      let result;
+
+      switch (chart.type) {
+        case 'bar':
+          result = await this.createBarChart(chart.data, chart.options);
+          break;
+        case 'line':
+          result = await this.createLineChart(chart.data, chart.options);
+          break;
+        case 'pie':
+          result = await this.createPieChart(chart.data, chart.options);
+          break;
+        case 'doughnut':
+          result = await this.createPieChart(chart.data, { ...chart.options, doughnut: true });
+          break;
+        case 'radar':
+          result = await this.createRadarChart(chart.data, chart.options);
+          break;
+        case 'polarArea':
+          result = await this.createPolarAreaChart(chart.data, chart.options);
+          break;
+        case 'scatter':
+          result = await this.createScatterChart(chart.data, chart.options);
+          break;
+        case 'mixed':
+          result = await this.createMixedChart(chart.data, chart.options);
+          break;
+        case 'heatmap':
+          result = await this.createHeatmap(chart.data, chart.options);
+          break;
+        case 'gauge':
+          result = await this.createGaugeChart(chart.value, chart.options);
+          break;
+        case 'progress':
+          result = await this.createProgressChart(chart.data, chart.options);
+          break;
+        default:
+          console.warn(`Tipo de gráfico no soportado: ${chart.type}`);
+          continue;
+      }
+
+      results.push({
+        name: chart.name,
+        type: chart.type,
+        image: result
+      });
+    }
+
+    return results;
+  }
+}
+
+module.exports = new ChartGenerator();

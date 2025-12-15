@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informe Ejecutivo - {{periodo}}</title>
+</head>
+<body>
+    <!-- PORTADA -->
+    <div class="portada">
+        <img src="{{logo}}" alt="UNIMET" class="logo">
+        <h1>INFORME EJECUTIVO</h1>
+        <h2>Sistema de Gestión de Becas</h2>
+        <h2>{{periodo}}</h2>
+        <div class="fecha">{{fechaGeneracion}}</div>
+    </div>
+
+    <!-- RESUMEN EJECUTIVO -->
+    <div class="contenido">
+        <h1>Resumen Ejecutivo</h1>
+
+        <div class="kpi-container">
+            {{#each kpis}}
+            <div class="kpi-card semaforo-{{semaforo}}">
+                <h4>{{nombre}}</h4>
+                <div class="valor">
+                    {{#ifEquals formato "numero"}}
+                        {{formatNumber valor}}
+                    {{/ifEquals}}
+                    {{#ifEquals formato "porcentaje"}}
+                        {{valor}}%
+                    {{/ifEquals}}
+                </div>
+                <div class="cambio {{#if (gt cambio 0)}}positivo{{else if (lt cambio 0)}}negativo{{/if}}">
+                    <span class="icono">{{cambioIcono cambio}}</span>
+                    <span>{{formatDecimal cambio}}%</span>
+                </div>
+            </div>
+            {{/each}}
+        </div>
+
+        <!-- SECCIÓN 1: ANÁLISIS DE POSTULACIONES -->
+        <div class="seccion page-break">
+            <h2>1. Análisis de Postulaciones</h2>
+
+            <div class="subseccion">
+                <h3>1.1 Distribución por Estado</h3>
+                <p>Durante el período {{periodo}}, se recibieron un total de <strong>{{formatNumber postulaciones.total}}</strong> postulaciones.</p>
+
+                <table class="tabla-destacada">
+                    <thead>
+                        <tr>
+                            <th>Estado</th>
+                            <th>Cantidad</th>
+                            <th>Porcentaje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each postulaciones.porEstado}}
+                        <tr>
+                            <td>{{estado}}</td>
+                            <td class="text-right">{{formatNumber cantidad}}</td>
+                            <td class="text-right">{{formatPercent (divide cantidad ../postulaciones.total)}}%</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+
+                {{#if postulaciones.graficos.barrasEstado}}
+                <div class="grafico-container">
+                    <img src="{{postulaciones.graficos.barrasEstado}}" alt="Distribución por Estado">
+                    <p class="grafico-titulo">Figura 1: Distribución de postulaciones por estado de evaluación</p>
+                </div>
+                {{/if}}
+            </div>
+
+            <div class="subseccion">
+                <h3>1.2 Distribución por Tipo de Beca</h3>
+
+                <div class="graficos-grid">
+                    {{#if postulaciones.graficos.pastelTipoBeca}}
+                    <div class="grafico-container">
+                        <img src="{{postulaciones.graficos.pastelTipoBeca}}" alt="Distribución por Tipo">
+                        <p class="grafico-titulo">Figura 2: Distribución por programa de beca</p>
+                    </div>
+                    {{/if}}
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Tipo de Beca</th>
+                                <th>Solicitudes</th>
+                                <th>Aprobadas</th>
+                                <th>Tasa Aprobación</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{#each postulaciones.porTipoBeca}}
+                            <tr>
+                                <td>{{tipoBeca}}</td>
+                                <td class="text-right">{{formatNumber cantidad}}</td>
+                                <td class="text-right">{{formatNumber aprobadas}}</td>
+                                <td class="text-right">
+                                    {{#if cantidad}}
+                                        {{formatPercent (divide aprobadas cantidad)}}%
+                                    {{else}}
+                                        0%
+                                    {{/if}}
+                                </td>
+                            </tr>
+                            {{/each}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {{#if postulaciones.motivosRechazo}}
+            <div class="subseccion">
+                <h3>1.3 Motivos de Rechazo Más Frecuentes</h3>
+
+                <ol class="lista-numerada">
+                    {{#each postulaciones.motivosRechazo}}
+                    <li>
+                        <strong>{{motivoRechazo}}</strong>
+                        <span class="text-gray">({{formatNumber frecuencia}} casos)</span>
+                    </li>
+                    {{/each}}
+                </ol>
+            </div>
+            {{/if}}
+        </div>
+
+        <!-- SECCIÓN 2: ANÁLISIS DE BENEFICIARIOS -->
+        <div class="seccion page-break">
+            <h2>2. Beneficiarios Activos</h2>
+
+            <div class="subseccion">
+                <h3>2.1 Top 10 Beneficiarios por Desempeño</h3>
+
+                <table class="tabla-destacada">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Nombre</th>
+                            <th>Cédula</th>
+                            <th>Tipo Beca</th>
+                            <th>Plaza</th>
+                            <th>Progreso</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each beneficiarios.topBeneficiarios}}
+                        <tr>
+                            <td>{{@index}}</td>
+                            <td>{{nombre}}</td>
+                            <td>{{cedula}}</td>
+                            <td>{{tipoBeca}}</td>
+                            <td>{{plaza}}</td>
+                            <td>
+                                <div class="progress-bar">
+                                    <div class="progress-bar-fill {{#if (gte progreso 80)}}success{{else if (gte progreso 50)}}warning{{else}}danger{{/if}}"
+                                         style="width: {{progreso}}%">
+                                        {{progreso}}%
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+
+            {{#if beneficiarios.supervisoresTop}}
+            <div class="subseccion">
+                <h3>2.2 Supervisores con Mayor Carga</h3>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Supervisor</th>
+                            <th>Email</th>
+                            <th>Estudiantes Asignados</th>
+                            <th>Promedio Completado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each beneficiarios.supervisoresTop}}
+                        <tr>
+                            <td>{{supervisor.nombre}} {{supervisor.apellido}}</td>
+                            <td>{{supervisor.email}}</td>
+                            <td class="text-center">{{cantidadEstudiantes}}</td>
+                            <td class="text-center">{{formatDecimal promedioCompletado}}%</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+            {{/if}}
+        </div>
+
+        <!-- SECCIÓN 3: PROGRAMA DE AYUDANTÍAS -->
+        <div class="seccion page-break">
+            <h2>3. Análisis del Programa de Ayudantías</h2>
+
+            <div class="dashboard-grid">
+                <div class="dashboard-widget">
+                    <h4>Total Ayudantes</h4>
+                    <div class="valor-principal">{{formatNumber ayudantias.metricas.totalAyudantes}}</div>
+                </div>
+
+                <div class="dashboard-widget">
+                    <h4>Horas Totales</h4>
+                    <div class="valor-principal">{{formatNumber ayudantias.metricas.totalHoras}}</div>
+                </div>
+
+                <div class="dashboard-widget">
+                    <h4>Tasa Cumplimiento</h4>
+                    <div class="valor-principal">{{ayudantias.metricas.tasaCumplimiento}}%</div>
+                </div>
+
+                <div class="dashboard-widget">
+                    <h4>Evaluaciones Satisfactorias</h4>
+                    <div class="valor-principal">{{ayudantias.metricas.tasaEvaluacionSatisfactoria}}%</div>
+                </div>
+            </div>
+
+            {{#if ayudantias.estudiantesEnRiesgo}}
+            <div class="subseccion">
+                <h3>3.1 Estudiantes en Riesgo de Incumplimiento</h3>
+
+                <div class="alerta warning">
+                    <span class="icono">⚠️</span>
+                    <div>
+                        <strong>{{length ayudantias.estudiantesEnRiesgo}} estudiantes</strong> están en riesgo de no cumplir con las horas requeridas.
+                    </div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Estudiante</th>
+                            <th>Email</th>
+                            <th>Completado</th>
+                            <th>Horas Restantes</th>
+                            <th>Semanas Rest.</th>
+                            <th>Horas/Semana Req.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each ayudantias.estudiantesEnRiesgo}}
+                        <tr>
+                            <td>{{nombre}}</td>
+                            <td>{{email}}</td>
+                            <td class="text-center">{{porcentajeCompletado}}%</td>
+                            <td class="text-center">{{formatNumber horasRestantes}}</td>
+                            <td class="text-center">{{semanasRestantes}}</td>
+                            <td class="text-center text-danger">{{horasSemanalesRequeridas}}</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+            {{/if}}
+
+            {{#if ayudantias.plazasTop}}
+            <div class="subseccion">
+                <h3>3.2 Plazas con Mayor Demanda</h3>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Ocupación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each ayudantias.plazasTop}}
+                        <tr>
+                            <td>{{nombre}}</td>
+                            <td>{{ocupacion}}</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+            {{/if}}
+
+            {{#if ayudantias.proyeccion}}
+            <div class="subseccion">
+                <h3>3.3 Proyección de Culminación</h3>
+
+                <div class="dashboard-grid">
+                    <div class="dashboard-widget">
+                        <h4>Cumplirán</h4>
+                        <div class="valor-principal text-success">{{ayudantias.proyeccion.cumpliran}}</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>No Cumplirán</h4>
+                        <div class="valor-principal text-danger">{{ayudantias.proyeccion.noCumpliran}}</div>
+                    </div>
+
+                    <div class="dashboard-widget">
+                        <h4>Tasa Éxito Proyectada</h4>
+                        <div class="valor-principal">{{ayudantias.proyeccion.tasaExito}}%</div>
+                    </div>
+                </div>
+            </div>
+            {{/if}}
+        </div>
+
+        <!-- SECCIÓN 4: INSIGHTS Y RECOMENDACIONES -->
+        {{#if insights}}
+        <div class="seccion">
+            <h2>4. Insights y Recomendaciones</h2>
+
+            <div class="insights">
+                <h3>📊 Hallazgos Clave</h3>
+                <ul>
+                    {{#each insights}}
+                    <li>
+                        <span class="icono">{{icono}}</span>
+                        <div class="contenido">
+                            <div class="titulo">{{mensaje}}</div>
+                            {{#if accion}}
+                            <div class="descripcion">Acción recomendada: {{accion}}</div>
+                            {{/if}}
+                        </div>
+                    </li>
+                    {{/each}}
+                </ul>
+            </div>
+
+            <div class="timeline mt-4">
+                <h3>Próximos Pasos Recomendados</h3>
+
+                {{#each insights}}
+                {{#if (eq prioridad "critica")}}
+                <div class="timeline-item">
+                    <div class="timeline-fecha">Inmediato</div>
+                    <div class="timeline-contenido">
+                        <strong>{{categoria}}</strong>: {{accion}}
+                    </div>
+                </div>
+                {{/if}}
+                {{/each}}
+
+                {{#each insights}}
+                {{#if (eq prioridad "alta")}}
+                <div class="timeline-item">
+                    <div class="timeline-fecha">Corto Plazo (1-2 semanas)</div>
+                    <div class="timeline-contenido">
+                        <strong>{{categoria}}</strong>: {{accion}}
+                    </div>
+                </div>
+                {{/if}}
+                {{/each}}
+
+                {{#each insights}}
+                {{#if (eq prioridad "media")}}
+                <div class="timeline-item">
+                    <div class="timeline-fecha">Mediano Plazo (1 mes)</div>
+                    <div class="timeline-contenido">
+                        <strong>{{categoria}}</strong>: {{accion}}
+                    </div>
+                </div>
+                {{/if}}
+                {{/each}}
+            </div>
+        </div>
+        {{/if}}
+    </div>
+
+    <!-- PIE DE PÁGINA -->
+    <div class="page-footer">
+        <p>{{universidad}} - {{sistema}}</p>
+        <p>Generado el {{fechaGeneracion}} a las {{horaGeneracion}}</p>
+        <p>Este documento contiene información confidencial</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,587 @@
+const PDFDocument = require('pdfkit');
+const ChartGenerator = require('./chartGenerator');
+
+/**
+ * Exportador de PDF con Tablas y Gráficos
+ *
+ * Genera archivos PDF con:
+ * - Tablas bien formateadas
+ * - Gráficos insertados como imágenes
+ * - Header/Footer con logo UNIMET
+ * - Estilos profesionales
+ */
+
+class PDFExporter {
+  /**
+   * Colores corporativos UNIMET
+   */
+  static COLORS = {
+    primary: '#003366',
+    secondary: '#0066CC',
+    text: '#333333',
+    lightGray: '#F2F2F2',
+    border: '#CCCCCC'
+  };
+
+  /**
+   * Crea un nuevo documento PDF con configuración base
+   */
+  crearDocumento() {
+    return new PDFDocument({
+      size: 'LETTER',
+      margins: { top: 50, bottom: 50, left: 50, right: 50 },
+      info: {
+        Title: 'Reporte del Sistema de Becas',
+        Author: 'Sistema de Gestión de Becas - UNIMET',
+        Subject: 'Reporte Generado',
+        Creator: 'Sistema de Becas UNIMET'
+      }
+    });
+  }
+
+  /**
+   * Agrega header al documento
+   */
+  agregarHeader(doc, titulo) {
+    doc
+      .fontSize(18)
+      .fillColor(PDFExporter.COLORS.primary)
+      .font('Helvetica-Bold')
+      .text('Universidad Metropolitana', 50, 30)
+      .fontSize(14)
+      .text('Sistema de Gestión de Becas', 50, 50);
+
+    doc
+      .fontSize(16)
+      .fillColor(PDFExporter.COLORS.secondary)
+      .text(titulo, 50, 80, { align: 'center' });
+
+    doc
+      .moveTo(50, 105)
+      .lineTo(doc.page.width - 50, 105)
+      .strokeColor(PDFExporter.COLORS.primary)
+      .lineWidth(2)
+      .stroke();
+
+    // Resetear a posición después del header
+    doc.y = 120;
+  }
+
+  /**
+   * Agrega footer al documento
+   */
+  agregarFooter(doc, numeroPagina, totalPaginas) {
+    const bottom = doc.page.height - 30;
+    doc
+      .fontSize(9)
+      .fillColor(PDFExporter.COLORS.text)
+      .text(
+        `Generado: ${new Date().toLocaleString('es-VE')}`,
+        50,
+        bottom,
+        { align: 'left' }
+      )
+      .text(
+        `Página ${numeroPagina} de ${totalPaginas}`,
+        0,
+        bottom,
+        { align: 'center' }
+      );
+  }
+
+  /**
+   * Agrega metadatos al documento
+   */
+  agregarMetadatos(doc, metadatos) {
+    const startY = doc.y + 10;
+    doc
+      .fontSize(10)
+      .fillColor(PDFExporter.COLORS.text)
+      .font('Helvetica');
+
+    Object.entries(metadatos).forEach(([key, value], index) => {
+      doc.text(`${key}: ${value}`, 50, startY + (index * 15));
+    });
+
+    doc.y = startY + (Object.keys(metadatos).length * 15) + 20;
+  }
+
+  /**
+   * Dibuja una tabla en el PDF
+   */
+  dibujarTabla(doc, opciones) {
+    const { headers, rows, startX = 50, startY, columnWidths, fontSize = 9 } = opciones;
+
+    let currentY = startY || doc.y;
+    const tableWidth = columnWidths.reduce((a, b) => a + b, 0);
+
+    // Header de la tabla
+    doc
+      .fontSize(fontSize)
+      .font('Helvetica-Bold')
+      .fillColor('white');
+
+    // Fondo del header
+    doc
+      .rect(startX, currentY, tableWidth, 20)
+      .fillAndStroke(PDFExporter.COLORS.primary, PDFExporter.COLORS.primary);
+
+    // Texto del header
+    let currentX = startX;
+    headers.forEach((header, i) => {
+      doc.text(
+        header,
+        currentX + 5,
+        currentY + 6,
+        { width: columnWidths[i] - 10, align: 'left' }
+      );
+      currentX += columnWidths[i];
+    });
+
+    currentY += 20;
+
+    // Filas de datos
+    doc.font('Helvetica').fillColor(PDFExporter.COLORS.text);
+
+    rows.forEach((row, rowIndex) => {
+      // Verificar si necesitamos nueva página
+      if (currentY > doc.page.height - 100) {
+        doc.addPage();
+        currentY = 50;
+
+        // Redibujar header en nueva página
+        doc
+          .fontSize(fontSize)
+          .font('Helvetica-Bold')
+          .fillColor('white');
+        doc
+          .rect(startX, currentY, tableWidth, 20)
+          .fillAndStroke(PDFExporter.COLORS.primary, PDFExporter.COLORS.primary);
+
+        currentX = startX;
+        headers.forEach((header, i) => {
+          doc.text(
+            header,
+            currentX + 5,
+            currentY + 6,
+            { width: columnWidths[i] - 10, align: 'left' }
+          );
+          currentX += columnWidths[i];
+        });
+
+        currentY += 20;
+        doc.font('Helvetica').fillColor(PDFExporter.COLORS.text);
+      }
+
+      // Fondo alternado para filas
+      if (rowIndex % 2 === 0) {
+        doc
+          .rect(startX, currentY, tableWidth, 18)
+          .fillAndStroke(PDFExporter.COLORS.lightGray, PDFExporter.COLORS.border);
+      }
+
+      // Contenido de la fila
+      currentX = startX;
+      row.forEach((cell, cellIndex) => {
+        doc.text(
+          String(cell),
+          currentX + 5,
+          currentY + 4,
+          { width: columnWidths[cellIndex] - 10, align: 'left', height: 18 }
+        );
+        currentX += columnWidths[cellIndex];
+      });
+
+      // Borde de la fila
+      doc
+        .rect(startX, currentY, tableWidth, 18)
+        .stroke(PDFExporter.COLORS.border);
+
+      currentY += 18;
+    });
+
+    doc.y = currentY + 20;
+  }
+
+  /**
+   * Inserta un gráfico en el PDF
+   */
+  async insertarGrafico(doc, chartBuffer, opciones = {}) {
+    const { width = 500, height = 300, align = 'center' } = opciones;
+
+    // Calcular posición
+    let x = 50;
+    if (align === 'center') {
+      x = (doc.page.width - width) / 2;
+    }
+
+    // Verificar si necesitamos nueva página
+    if (doc.y + height > doc.page.height - 50) {
+      doc.addPage();
+      doc.y = 50;
+    }
+
+    const y = doc.y;
+
+    // Insertar imagen
+    doc.image(chartBuffer, x, y, { width, height });
+
+    doc.y = y + height + 20;
+  }
+
+  /**
+   * Genera reporte de becarios en PDF
+   */
+  async generarReporteBecarios(becarios, conGrafico = true) {
+    const doc = this.crearDocumento();
+    const chunks = [];
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+
+    this.agregarHeader(doc, 'Reporte de Estudiantes Becarios');
+
+    this.agregarMetadatos(doc, {
+      'Fecha de generación': new Date().toLocaleString('es-VE'),
+      'Total de becarios': becarios.length,
+      'Becarios al día': becarios.filter(b => !b.enRiesgo).length,
+      'Becarios en riesgo': becarios.filter(b => b.enRiesgo).length
+    });
+
+    // Tabla de becarios
+    const headers = ['Nombre', 'Tipo Beca', 'Progreso', 'Estado'];
+    const rows = becarios.map(b => [
+      `${b.usuario.nombre} ${b.usuario.apellido}`,
+      b.tipoBeca,
+      `${b.porcentajeCompletado}%`,
+      b.estadoProgreso
+    ]);
+
+    const columnWidths = [200, 120, 80, 100];
+
+    this.dibujarTabla(doc, { headers, rows, columnWidths, startY: doc.y });
+
+    // Agregar gráfico si se solicita
+    if (conGrafico && becarios.length > 0) {
+      doc.addPage();
+      doc.y = 50;
+      doc.fontSize(14).font('Helvetica-Bold').text('Gráfico de Progreso', { align: 'center' });
+      doc.moveDown();
+
+      const chartGen = new ChartGenerator();
+      const chartBuffer = await chartGen.graficoProgresoBecarios(becarios);
+      await this.insertarGrafico(doc, chartBuffer);
+    }
+
+    doc.end();
+
+    return new Promise((resolve) => {
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  }
+
+  /**
+   * Genera reporte de plazas en PDF
+   */
+  async generarReportePlazas(plazas, conGrafico = true) {
+    const doc = this.crearDocumento();
+    const chunks = [];
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+
+    this.agregarHeader(doc, 'Reporte de Plazas');
+
+    this.agregarMetadatos(doc, {
+      'Fecha de generación': new Date().toLocaleString('es-VE'),
+      'Total de plazas': plazas.length,
+      'Plazas activas': plazas.filter(p => p.estado === 'Activa').length,
+      'Plazas inactivas': plazas.filter(p => p.estado === 'Inactiva').length
+    });
+
+    // Tabla de plazas
+    const headers = ['Nombre', 'Capacidad', 'Ocupadas', 'Disponibles'];
+    const rows = plazas.map(p => [
+      p.nombre.substring(0, 50),
+      p.capacidad,
+      p.ocupadas,
+      p.disponibles
+    ]);
+
+    const columnWidths = [280, 80, 80, 90];
+
+    this.dibujarTabla(doc, { headers, rows, columnWidths, startY: doc.y });
+
+    // Agregar gráfico
+    if (conGrafico && plazas.length > 0) {
+      doc.addPage();
+      doc.y = 50;
+      doc.fontSize(14).font('Helvetica-Bold').text('Distribución de Plazas', { align: 'center' });
+      doc.moveDown();
+
+      const chartGen = new ChartGenerator();
+      const chartBuffer = await chartGen.graficoDistribucionPlazas(plazas);
+      await this.insertarGrafico(doc, chartBuffer);
+    }
+
+    doc.end();
+
+    return new Promise((resolve) => {
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  }
+
+  /**
+   * Genera reporte de supervisores en PDF
+   */
+  async generarReporteSupervisores(supervisores, conGrafico = true) {
+    const doc = this.crearDocumento();
+    const chunks = [];
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+
+    this.agregarHeader(doc, 'Reporte de Supervisores');
+
+    this.agregarMetadatos(doc, {
+      'Fecha de generación': new Date().toLocaleString('es-VE'),
+      'Total de supervisores': supervisores.length,
+      'Becarios supervisados': supervisores.reduce((sum, s) => sum + s.estadisticas.becariosActivos, 0),
+      'Reportes pendientes': supervisores.reduce((sum, s) => sum + s.estadisticas.reportesPendientesRevision, 0)
+    });
+
+    // Tabla de supervisores
+    const headers = ['Nombre', 'Departamento', 'Becarios', 'Horas Sup.', 'Tasa Aprob.'];
+    const rows = supervisores.map(s => [
+      `${s.nombre} ${s.apellido}`,
+      s.departamento || 'N/A',
+      s.estadisticas.becariosActivos,
+      s.estadisticas.horasTotalesSupervisadas,
+      `${s.estadisticas.tasaAprobacion}%`
+    ]);
+
+    const columnWidths = [150, 120, 80, 90, 90];
+
+    this.dibujarTabla(doc, { headers, rows, columnWidths, startY: doc.y });
+
+    // Agregar gráfico
+    if (conGrafico && supervisores.length > 0) {
+      doc.addPage();
+      doc.y = 50;
+      doc.fontSize(14).font('Helvetica-Bold').text('Carga de Trabajo', { align: 'center' });
+      doc.moveDown();
+
+      const chartGen = new ChartGenerator();
+      const chartBuffer = await chartGen.graficoCargaSupervisores(supervisores);
+      await this.insertarGrafico(doc, chartBuffer);
+    }
+
+    doc.end();
+
+    return new Promise((resolve) => {
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  }
+
+  /**
+   * Genera reporte de actividades en PDF
+   */
+  async generarReporteActividades(estadisticas, conGrafico = true) {
+    const doc = this.crearDocumento();
+    const chunks = [];
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+
+    this.agregarHeader(doc, 'Estadísticas de Reportes de Actividades');
+
+    this.agregarMetadatos(doc, {
+      'Fecha de generación': new Date().toLocaleString('es-VE'),
+      'Período': estadisticas.periodo,
+      'Total de reportes': estadisticas.resumen.totalReportes,
+      'Tasa de aprobación': `${estadisticas.resumen.tasaAprobacion}%`,
+      'Horas totales aprobadas': estadisticas.resumen.horasTotalesAprobadas
+    });
+
+    // Tabla por semana
+    doc.fontSize(12).font('Helvetica-Bold').text('Distribución por Semana', 50, doc.y);
+    doc.moveDown();
+
+    const headers = ['Semana', 'Reportes', 'Horas', 'Promedio'];
+    const rows = estadisticas.distribucionPorSemana.map(d => [
+      `Semana ${d.semana}`,
+      d.reportes,
+      d.horas,
+      d.promedio
+    ]);
+
+    const columnWidths = [100, 100, 100, 100];
+
+    this.dibujarTabla(doc, { headers, rows, columnWidths, startY: doc.y });
+
+    // Agregar gráfico
+    if (conGrafico && estadisticas.distribucionPorSemana.length > 0) {
+      doc.addPage();
+      doc.y = 50;
+      doc.fontSize(14).font('Helvetica-Bold').text('Horas por Semana', { align: 'center' });
+      doc.moveDown();
+
+      const chartGen = new ChartGenerator();
+      const chartBuffer = await chartGen.graficoHorasPorSemana(estadisticas.distribucionPorSemana);
+      await this.insertarGrafico(doc, chartBuffer);
+    }
+
+    doc.end();
+
+    return new Promise((resolve) => {
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  }
+
+  /**
+   * Genera reporte de distribución por tipo de beca en PDF
+   */
+  async generarReporteDistribucionBecas(distribucion, conGrafico = true) {
+    const doc = this.crearDocumento();
+    const chunks = [];
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+
+    this.agregarHeader(doc, 'Distribución por Tipo de Beca');
+
+    // Tabla
+    const headers = ['Tipo Beca', 'Beneficiarios', 'Postulaciones', 'Tasa Aprob.'];
+    const rows = distribucion.map(d => [
+      d.tipoBeca,
+      d.beneficiariosActivos,
+      d.postulaciones,
+      `${d.tasaAprobacion}%`
+    ]);
+
+    const columnWidths = [150, 100, 100, 100];
+
+    this.dibujarTabla(doc, { headers, rows, columnWidths, startY: doc.y });
+
+    // Agregar gráfico
+    if (conGrafico && distribucion.length > 0) {
+      doc.addPage();
+      doc.y = 50;
+      const chartGen = new ChartGenerator();
+      const chartBuffer = await chartGen.graficoDistribucionBecas(distribucion);
+      await this.insertarGrafico(doc, chartBuffer);
+    }
+
+    doc.end();
+
+    return new Promise((resolve) => {
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  }
+
+  /**
+   * Genera reporte de distribución por tipo de postulante en PDF
+   */
+  async generarReporteDistribucionPostulantes(distribucion, conGrafico = true) {
+    const doc = this.crearDocumento();
+    const chunks = [];
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+
+    this.agregarHeader(doc, 'Distribución por Tipo de Postulante');
+
+    // Tabla
+    const headers = ['Tipo', 'Postulaciones', 'Aprobadas', 'IAA Prom.'];
+    const rows = distribucion.map(d => {
+      const tipo = d.tipoPostulante === 'estudiante-pregrado' ? 'Pregrado' :
+                   d.tipoPostulante === 'estudiante-postgrado' ? 'Postgrado' : 'Bachiller';
+      return [
+        tipo,
+        d.postulaciones,
+        d.aprobadas,
+        d.iaaPromedio
+      ];
+    });
+
+    const columnWidths = [150, 120, 120, 100];
+
+    this.dibujarTabla(doc, { headers, rows, columnWidths, startY: doc.y });
+
+    // Agregar gráfico
+    if (conGrafico && distribucion.length > 0) {
+      doc.addPage();
+      doc.y = 50;
+      const chartGen = new ChartGenerator();
+      const chartBuffer = await chartGen.graficoDistribucionPostulantes(distribucion);
+      await this.insertarGrafico(doc, chartBuffer);
+    }
+
+    doc.end();
+
+    return new Promise((resolve) => {
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  }
+
+  /**
+   * Genera dashboard completo en PDF (múltiples páginas)
+   */
+  async generarDashboardCompleto(datos, conGraficos = true) {
+    const doc = this.crearDocumento();
+    const chunks = [];
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+
+    this.agregarHeader(doc, 'Dashboard General del Sistema de Becas');
+
+    // Resumen ejecutivo
+    doc.fontSize(14).font('Helvetica-Bold').text('Resumen Ejecutivo', 50, doc.y);
+    doc.moveDown();
+
+    const metadatos = {
+      'Fecha de generación': new Date().toLocaleString('es-VE'),
+      'Período': datos.periodo || 'Todos'
+    };
+
+    if (datos.becarios) {
+      metadatos['Total de becarios activos'] = datos.becarios.length;
+    }
+    if (datos.plazas) {
+      metadatos['Total de plazas'] = datos.plazas.length;
+    }
+    if (datos.supervisores) {
+      metadatos['Total de supervisores'] = datos.supervisores.length;
+    }
+
+    this.agregarMetadatos(doc, metadatos);
+
+    // Agregar secciones según datos disponibles
+    if (datos.estadisticasActividades && conGraficos) {
+      doc.addPage();
+      doc.y = 50;
+      doc.fontSize(14).font('Helvetica-Bold').text('Estado de Reportes', { align: 'center' });
+      doc.moveDown();
+
+      const chartGen = new ChartGenerator();
+      const chartBuffer = await chartGen.graficoEstadoReportes(datos.estadisticasActividades.resumen);
+      await this.insertarGrafico(doc, chartBuffer);
+    }
+
+    doc.end();
+
+    return new Promise((resolve) => {
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  }
+}
+
+module.exports = PDFExporter;

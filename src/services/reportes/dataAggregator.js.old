@@ -1,0 +1,1067 @@
+const {
+  Postulacion,
+  EstudianteBecario,
+  ReporteActividad,
+  Usuario,
+  Plaza,
+  sequelize
+} = require('../../models');
+const { Op } = require('sequelize');
+const moment = require('moment');
+const numeral = require('numeral');
+
+class DataAggregator {
+  /**
+   * Obtener métricas principales del sistema (KPIs)
+   */
+  async getKPIs(periodoAcademico = null) {
+    const whereClause = periodoAcademico ? { periodoInicio: periodoAcademico } : {};
+    const wherePostulacion = periodoAcademico ? { trimestre: periodoAcademico } : {};
+
+    // Obtener período anterior para comparación
+    const periodoAnterior = this.getPeriodoAnterior(periodoAcademico);
+    const whereAnterior = periodoAnterior ? { periodoInicio: periodoAnterior } : {};
+    const wherePostulacionAnterior = periodoAnterior ? { trimestre: periodoAnterior } : {};
+
+    // Métricas actuales
+    const [
+      totalBeneficiarios,
+      totalPostulaciones,
+      tasaAprobacion,
+      horasTotales,
+      tasaCulminacion
+    ] = await Promise.all([
+      EstudianteBecario.count({ where: { ...whereClause, estado: 'Activa' } }),
+      Postulacion.count({ where: wherePostulacion }),
+      this.calcularTasaAprobacion(wherePostulacion),
+      ReporteActividad.sum('horasTrabajadas', { where: { estado: 'Aprobada', periodoAcademico } }),
+      this.calcularTasaCulminacion(whereClause)
+    ]);
+
+    // Métricas del período anterior
+    const [
+      totalBeneficiariosAnterior,
+      totalPostulacionesAnterior,
+      tasaAprobacionAnterior,
+      horasTotalesAnterior
+    ] = periodoAnterior ? await Promise.all([
+      EstudianteBecario.count({ where: { ...whereAnterior, estado: 'Activa' } }),
+      Postulacion.count({ where: wherePostulacionAnterior }),
+      this.calcularTasaAprobacion(wherePostulacionAnterior),
+      ReporteActividad.sum('horasTrabajadas', { where: { estado: 'Aprobada', periodoAcademico: periodoAnterior } })
+    ]) : [0, 0, 0, 0];
+
+    return [
+      {
+        nombre: 'Total Beneficiarios Activos',
+        valor: totalBeneficiarios,
+        cambio: this.calcularCambioPortcentual(totalBeneficiarios, totalBeneficiariosAnterior),
+        semaforo: this.determinarSemaforo(totalBeneficiarios, totalBeneficiariosAnterior, 'mayor_mejor'),
+        icono: 'users',
+        formato: 'numero'
+      },
+      {
+        nombre: 'Total Postulaciones',
+        valor: totalPostulaciones,
+        cambio: this.calcularCambioPortcentual(totalPostulaciones, totalPostulacionesAnterior),
+        semaforo: this.determinarSemaforo(totalPostulaciones, totalPostulacionesAnterior, 'mayor_mejor'),
+        icono: 'file-text',
+        formato: 'numero'
+      },
+      {
+        nombre: 'Tasa de Aprobación',
+        valor: tasaAprobacion,
+        cambio: tasaAprobacion - tasaAprobacionAnterior,
+        semaforo: this.determinarSemaforo(tasaAprobacion, 65, 'porcentaje'),
+        icono: 'check-circle',
+        formato: 'porcentaje'
+      },
+      {
+        nombre: 'Horas Trabajadas',
+        valor: horasTotales || 0,
+        cambio: this.calcularCambioPortcentual(horasTotales || 0, horasTotalesAnterior || 0),
+        semaforo: this.determinarSemaforo(horasTotales || 0, horasTotalesAnterior || 0, 'mayor_mejor'),
+        icono: 'clock',
+        formato: 'numero'
+      },
+      {
+        nombre: 'Tasa de Culminación',
+        valor: tasaCulminacion,
+        cambio: 0,
+        semaforo: this.determinarSemaforo(tasaCulminacion, 80, 'porcentaje'),
+        icono: 'award',
+        formato: 'porcentaje'
+      }
+    ];
+  }
+
+  /**
+   * Obtener distribución de postulaciones por estado y tipo
+   */
+  async getDistribucionPostulaciones(filtros = {}) {
+    const { periodoAcademico, fechaInicio, fechaFin } = filtros;
+
+    const where = {};
+    if (periodoAcademico) where.trimestre = periodoAcademico;
+    if (fechaInicio || fechaFin) {
+      where.fechaPostulacion = {};
+      if (fechaInicio) where.fechaPostulacion[Op.gte] = new Date(fechaInicio);
+      if (fechaFin) where.fechaPostulacion[Op.lte] = new Date(fechaFin);
+    }
+
+    // Por estado
+    const porEstado = await Postulacion.findAll({
+      where,
+      attributes: [
+        'estado',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
+      ],
+      group: ['estado'],
+      raw: true
+    });
+
+    // Por tipo de beca
+    const porTipoBeca = await Postulacion.findAll({
+      where,
+      attributes: [
+        'tipoBeca',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
+      ],
+      group: ['tipoBeca'],
+      raw: true
+    });
+
+    // Por tipo de postulante
+    const porTipoPostulante = await Postulacion.findAll({
+      where,
+      attributes: [
+        'tipoPostulante',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
+      ],
+      group: ['tipoPostulante'],
+      raw: true
+    });
+
+    // Top motivos de rechazo
+    const motivosRechazo = await Postulacion.findAll({
+      where: {
+        ...where,
+        estado: 'Rechazada',
+        motiveRechazo: { [Op.not]: null }
+      },
+      attributes: [
+        'motiveRechazo',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'frecuencia']
+      ],
+      group: ['motiveRechazo'],
+      order: [[sequelize.literal('frecuencia'), 'DESC']],
+      limit: 5,
+      raw: true
+    });
+
+    return {
+      porEstado,
+      porTipoBeca,
+      porTipoPostulante,
+      motivosRechazo
+    };
+  }
+
+  /**
+   * Obtener análisis de beneficiarios
+   */
+  async getAnalisisBeneficiarios(periodoAcademico = null) {
+    const where = periodoAcademico ? { periodoInicio: periodoAcademico } : {};
+
+    // Beneficiarios por tipo de beca y estado
+    const distribucion = await EstudianteBecario.findAll({
+      where,
+      attributes: [
+        'tipoBeca',
+        'estado',
+        [sequelize.fn('COUNT', sequelize.col('EstudianteBecario.id')), 'cantidad'],
+        [sequelize.fn('AVG', sequelize.col('"horasCompletadas"')), 'horasPromedio']
+      ],
+      group: ['tipoBeca', 'estado'],
+      raw: true
+    });
+
+    // Top 10 beneficiarios por rendimiento
+    const topBeneficiarios = await EstudianteBecario.findAll({
+      where: {
+        ...where,
+        estado: 'Activa'
+      },
+      include: [
+        {
+          model: Usuario,
+          as: 'usuario',
+          attributes: ['nombre', 'apellido', 'email', 'cedula']
+        },
+        {
+          model: Plaza,
+          as: 'plaza',
+          attributes: ['codigo', 'materia', 'departamento']
+        }
+      ],
+      order: [
+        [sequelize.literal('"horasCompletadas" / NULLIF("horasRequeridas", 0)'), 'DESC']
+      ],
+      limit: 10
+    });
+
+    // Mapa de calor: Carreras vs Tipos de Beca
+    const mapaCalor = await this.generarMapaCalorBecasPorCarrera();
+
+    // Supervisores con más estudiantes
+    const supervisoresTop = await EstudianteBecario.findAll({
+      where: {
+        ...where,
+        plazaAsignada: { [Op.not]: null }
+      },
+      attributes: [
+        [sequelize.col('plaza.supervisorResponsable'), 'supervisorId'],
+        [sequelize.fn('COUNT', sequelize.col('EstudianteBecario.id')), 'cantidadEstudiantes'],
+        [sequelize.fn('AVG', sequelize.literal('"horasCompletadas"::float / NULLIF("horasRequeridas", 0) * 100')), 'promedioCompletado']
+      ],
+      include: [
+        {
+          model: Plaza,
+          as: 'plaza',
+          required: true,
+          attributes: [],
+          include: [{
+            model: Usuario,
+            as: 'supervisor',
+            attributes: ['id', 'nombre', 'apellido', 'email']
+          }]
+        }
+      ],
+      group: [
+        'plaza.supervisorResponsable',
+        'plaza->supervisor.id',
+        'plaza->supervisor.nombre',
+        'plaza->supervisor.apellido',
+        'plaza->supervisor.email'
+      ],
+      order: [[sequelize.literal('"cantidadEstudiantes"'), 'DESC']],
+      limit: 10,
+      raw: false
+    });
+
+    return {
+      distribucion,
+      topBeneficiarios: topBeneficiarios.map(b => ({
+        nombre: `${b.usuario.nombre} ${b.usuario.apellido}`,
+        email: b.usuario.email,
+        cedula: b.usuario.cedula,
+        tipoBeca: b.tipoBeca,
+        plaza: b.plaza ? `${b.plaza.codigo} - ${b.plaza.materia}` : 'Sin asignar',
+        progreso: ((b.horasCompletadas / b.horasRequeridas) * 100).toFixed(1),
+        horasCompletadas: b.horasCompletadas,
+        horasRequeridas: b.horasRequeridas
+      })),
+      mapaCalor,
+      supervisoresTop
+    };
+  }
+
+  /**
+   * Obtener análisis de programa de ayudantías
+   */
+  async getAnalisisAyudantias(periodoAcademico = null) {
+    const where = { tipoBeca: 'Ayudantía' };
+    if (periodoAcademico) where.periodoInicio = periodoAcademico;
+
+    // Métricas generales
+    const [
+      totalAyudantes,
+      totalHoras,
+      promedioHoras,
+      tasaCumplimiento,
+      evaluacionesSatisfactorias
+    ] = await Promise.all([
+      EstudianteBecario.count({ where }),
+      EstudianteBecario.sum('horasCompletadas', { where }),
+      EstudianteBecario.findOne({
+        where,
+        attributes: [
+          [sequelize.fn('AVG', sequelize.col('"horasCompletadas"')), 'promedio']
+        ],
+        raw: true
+      }),
+      this.calcularTasaCumplimientoAyudantias(where),
+      EstudianteBecario.count({
+        where: {
+          ...where,
+          evaluacionSatisfactoria: true
+        }
+      })
+    ]);
+
+    // Distribución por departamento
+    const porDepartamento = await EstudianteBecario.findAll({
+      where,
+      include: [{
+        model: Plaza,
+        as: 'plaza',
+        attributes: ['departamento']
+      }],
+      attributes: [
+        [sequelize.col('plaza.departamento'), 'departamento'],
+        [sequelize.fn('COUNT', sequelize.col('EstudianteBecario.id')), 'cantidad']
+      ],
+      group: ['plaza.departamento'],
+      raw: true
+    });
+
+    // Estudiantes en riesgo
+    const enRiesgo = await this.identificarEstudiantesEnRiesgoDetallado(where);
+
+    // Top 10 plazas más demandadas
+    const plazasTop = await EstudianteBecario.findAll({
+      where: {
+        ...where,
+        plazaAsignada: { [Op.not]: null }
+      },
+      attributes: [
+        'plazaAsignada',
+        [sequelize.fn('COUNT', sequelize.col('EstudianteBecario.id')), 'demanda']
+      ],
+      include: [{
+        model: Plaza,
+        as: 'plaza',
+        attributes: ['codigo', 'materia', 'departamento', 'capacidad']
+      }],
+      group: ['plazaAsignada', 'plaza.id', 'plaza.codigo', 'plaza.materia', 'plaza.departamento', 'plaza.capacidad'],
+      order: [[sequelize.literal('"demanda"'), 'DESC']],
+      limit: 10
+    });
+
+    // Proyección de culminación
+    const proyeccion = await this.proyectarCulminacionAyudantias(where);
+
+    return {
+      metricas: {
+        totalAyudantes,
+        totalHoras: totalHoras || 0,
+        promedioHorasPorAyudante: promedioHoras?.promedio || 0,
+        tasaCumplimiento,
+        tasaEvaluacionSatisfactoria: totalAyudantes > 0
+          ? ((evaluacionesSatisfactorias / totalAyudantes) * 100).toFixed(1)
+          : 0
+      },
+      porDepartamento,
+      estudiantesEnRiesgo: enRiesgo,
+      plazasTop: plazasTop.map(p => ({
+        codigo: p.plaza.codigo,
+        materia: p.plaza.materia,
+        departamento: p.plaza.departamento,
+        demanda: parseInt(p.dataValues.demanda),
+        capacidad: p.plaza.capacidad,
+        ocupacion: `${p.dataValues.demanda}/${p.plaza.capacidad}`
+      })),
+      proyeccion
+    };
+  }
+
+  /**
+   * Generar insights automáticos basados en los datos
+   */
+  async generarInsights(datos, tipo = 'general') {
+    const insights = [];
+
+    switch (tipo) {
+      case 'postulaciones':
+        insights.push(...await this.generarInsightsPostulaciones(datos));
+        break;
+      case 'beneficiarios':
+        insights.push(...await this.generarInsightsBeneficiarios(datos));
+        break;
+      case 'ayudantias':
+        insights.push(...await this.generarInsightsAyudantias(datos));
+        break;
+      case 'general':
+        insights.push(...await this.generarInsightsGenerales(datos));
+        break;
+    }
+
+    return insights.filter(insight => insight !== null);
+  }
+
+  /**
+   * Insights para postulaciones
+   */
+  async generarInsightsPostulaciones(datos) {
+    const insights = [];
+
+    // Tasa de aprobación
+    if (datos.tasaAprobacion < 50) {
+      insights.push({
+        tipo: 'warning',
+        categoria: 'postulaciones',
+        mensaje: `La tasa de aprobación (${datos.tasaAprobacion}%) está por debajo del 50%. Considere revisar los criterios de evaluación.`,
+        accion: 'Revisar criterios de evaluación',
+        prioridad: 'alta'
+      });
+    } else if (datos.tasaAprobacion > 80) {
+      insights.push({
+        tipo: 'info',
+        categoria: 'postulaciones',
+        mensaje: `Excelente tasa de aprobación (${datos.tasaAprobacion}%). El proceso de selección está funcionando eficientemente.`,
+        accion: 'Mantener criterios actuales',
+        prioridad: 'baja'
+      });
+    }
+
+    // Tiempo de evaluación
+    if (datos.tiempoPromedioEvaluacion > 7) {
+      insights.push({
+        tipo: 'warning',
+        categoria: 'postulaciones',
+        mensaje: `El tiempo promedio de evaluación (${datos.tiempoPromedioEvaluacion} días) excede una semana. Considere asignar más evaluadores.`,
+        accion: 'Asignar evaluadores adicionales',
+        prioridad: 'media'
+      });
+    }
+
+    // Programa más demandado
+    if (datos.programaMasDemandado) {
+      insights.push({
+        tipo: 'info',
+        categoria: 'postulaciones',
+        mensaje: `El programa "${datos.programaMasDemandado.nombre}" tiene la mayor demanda con ${datos.programaMasDemandado.cantidad} solicitudes.`,
+        accion: 'Considerar expandir cupos disponibles',
+        prioridad: 'media'
+      });
+    }
+
+    return insights;
+  }
+
+  /**
+   * Insights para beneficiarios
+   */
+  async generarInsightsBeneficiarios(datos) {
+    const insights = [];
+
+    // Distribución desbalanceada
+    if (datos.distribucion && datos.distribucion.length > 0) {
+      const total = datos.distribucion.reduce((sum, d) => sum + parseInt(d.cantidad), 0);
+      const maxPrograma = datos.distribucion.reduce((max, d) =>
+        parseInt(d.cantidad) > parseInt(max.cantidad) ? d : max
+      );
+
+      const porcentaje = (parseInt(maxPrograma.cantidad) / total) * 100;
+      if (porcentaje > 60) {
+        insights.push({
+          tipo: 'info',
+          categoria: 'beneficiarios',
+          mensaje: `El programa "${maxPrograma.tipoBeca}" concentra el ${porcentaje.toFixed(1)}% de los beneficiarios. Considere diversificar.`,
+          accion: 'Promover otros programas de becas',
+          prioridad: 'baja'
+        });
+      }
+    }
+
+    // Supervisores sobrecargados
+    if (datos.supervisoresTop && datos.supervisoresTop.length > 0) {
+      const sobrecargados = datos.supervisoresTop.filter(s =>
+        parseInt(s.dataValues.cantidadEstudiantes) > 10
+      );
+
+      if (sobrecargados.length > 0) {
+        insights.push({
+          tipo: 'warning',
+          categoria: 'beneficiarios',
+          mensaje: `${sobrecargados.length} supervisor(es) tienen más de 10 estudiantes asignados. Redistribuya la carga.`,
+          accion: 'Asignar supervisores adicionales',
+          prioridad: 'alta'
+        });
+      }
+    }
+
+    return insights;
+  }
+
+  /**
+   * Insights para ayudantías
+   */
+  async generarInsightsAyudantias(datos) {
+    const insights = [];
+
+    // Estudiantes en riesgo
+    if (datos.estudiantesEnRiesgo && datos.estudiantesEnRiesgo.length > 0) {
+      const porcentajeRiesgo = (datos.estudiantesEnRiesgo.length / datos.metricas.totalAyudantes) * 100;
+
+      if (porcentajeRiesgo > 20) {
+        insights.push({
+          tipo: 'error',
+          categoria: 'ayudantias',
+          mensaje: `${datos.estudiantesEnRiesgo.length} ayudantes (${porcentajeRiesgo.toFixed(1)}%) están en riesgo de no cumplir las horas requeridas.`,
+          accion: 'Intervención urgente requerida',
+          prioridad: 'critica'
+        });
+      }
+    }
+
+    // Tasa de evaluación satisfactoria
+    const tasaEval = parseFloat(datos.metricas.tasaEvaluacionSatisfactoria);
+    if (tasaEval < 70) {
+      insights.push({
+        tipo: 'warning',
+        categoria: 'ayudantias',
+        mensaje: `Solo el ${tasaEval}% de las evaluaciones son satisfactorias. Revise el proceso de supervisión.`,
+        accion: 'Capacitar supervisores',
+        prioridad: 'alta'
+      });
+    } else if (tasaEval > 90) {
+      insights.push({
+        tipo: 'success',
+        categoria: 'ayudantias',
+        mensaje: `Excelente desempeño: ${tasaEval}% de evaluaciones satisfactorias.`,
+        accion: 'Mantener estrategia actual',
+        prioridad: 'baja'
+      });
+    }
+
+    // Plazas con alta demanda
+    if (datos.plazasTop && datos.plazasTop.length > 0) {
+      const sobredemandadas = datos.plazasTop.filter(p =>
+        p.demanda > p.capacidad
+      );
+
+      if (sobredemandadas.length > 0) {
+        insights.push({
+          tipo: 'info',
+          categoria: 'ayudantias',
+          mensaje: `${sobredemandadas.length} plaza(s) tienen más demanda que capacidad. La más solicitada es "${sobredemandadas[0].materia}".`,
+          accion: 'Considerar aumentar capacidad',
+          prioridad: 'media'
+        });
+      }
+    }
+
+    // Proyección de culminación
+    if (datos.proyeccion) {
+      const tasaProyectada = (datos.proyeccion.cumpliran / datos.metricas.totalAyudantes) * 100;
+
+      if (tasaProyectada < 80) {
+        insights.push({
+          tipo: 'warning',
+          categoria: 'ayudantias',
+          mensaje: `Proyección: solo el ${tasaProyectada.toFixed(1)}% culminará exitosamente según la tendencia actual.`,
+          accion: 'Implementar medidas de apoyo',
+          prioridad: 'alta'
+        });
+      }
+    }
+
+    return insights;
+  }
+
+  /**
+   * Insights generales del sistema
+   */
+  async generarInsightsGenerales(datos) {
+    const insights = [];
+
+    // Análisis de tendencia
+    if (datos.tendencia) {
+      if (datos.tendencia.crecimiento > 20) {
+        insights.push({
+          tipo: 'success',
+          categoria: 'general',
+          mensaje: `Crecimiento del ${datos.tendencia.crecimiento}% en postulaciones respecto al período anterior.`,
+          accion: 'Preparar recursos adicionales',
+          prioridad: 'media'
+        });
+      } else if (datos.tendencia.crecimiento < -10) {
+        insights.push({
+          tipo: 'warning',
+          categoria: 'general',
+          mensaje: `Disminución del ${Math.abs(datos.tendencia.crecimiento)}% en postulaciones. Investigar causas.`,
+          accion: 'Aumentar difusión de programas',
+          prioridad: 'alta'
+        });
+      }
+    }
+
+    // Eficiencia del sistema
+    if (datos.kpis) {
+      const eficiencia = this.calcularEficienciaGeneral(datos.kpis);
+
+      if (eficiencia < 60) {
+        insights.push({
+          tipo: 'error',
+          categoria: 'general',
+          mensaje: `Eficiencia general del sistema en ${eficiencia}%. Se requieren mejoras urgentes.`,
+          accion: 'Revisión completa de procesos',
+          prioridad: 'critica'
+        });
+      } else if (eficiencia > 85) {
+        insights.push({
+          tipo: 'success',
+          categoria: 'general',
+          mensaje: `Sistema operando con ${eficiencia}% de eficiencia. Excelente rendimiento.`,
+          accion: 'Documentar mejores prácticas',
+          prioridad: 'baja'
+        });
+      }
+    }
+
+    return insights;
+  }
+
+  // ========== MÉTODOS AUXILIARES ==========
+
+  calcularCambioPortcentual(actual, anterior) {
+    if (anterior === 0) return actual > 0 ? 100 : 0;
+    return ((actual - anterior) / anterior) * 100;
+  }
+
+  determinarSemaforo(valor, referencia, tipo) {
+    switch (tipo) {
+      case 'mayor_mejor':
+        if (valor > referencia) return 'verde';
+        if (valor > referencia * 0.8) return 'amarillo';
+        return 'rojo';
+
+      case 'porcentaje':
+        if (valor >= 80) return 'verde';
+        if (valor >= 50) return 'amarillo';
+        return 'rojo';
+
+      case 'menor_mejor':
+        if (valor < referencia) return 'verde';
+        if (valor < referencia * 1.2) return 'amarillo';
+        return 'rojo';
+
+      default:
+        return 'amarillo';
+    }
+  }
+
+  getPeriodoAnterior(periodoActual) {
+    if (!periodoActual) return null;
+
+    // Formato esperado: "2024-1" o similar
+    const [año, numero] = periodoActual.split('-');
+    const numeroAnterior = parseInt(numero) - 1;
+
+    if (numeroAnterior < 1) {
+      return `${parseInt(año) - 1}-3`;
+    }
+
+    return `${año}-${numeroAnterior}`;
+  }
+
+  async calcularTasaAprobacion(where) {
+    const total = await Postulacion.count({ where });
+    if (total === 0) return 0;
+
+    const aprobadas = await Postulacion.count({
+      where: { ...where, estado: 'Aprobada' }
+    });
+
+    return ((aprobadas / total) * 100).toFixed(1);
+  }
+
+  async calcularTasaCulminacion(where) {
+    const total = await EstudianteBecario.count({ where });
+    if (total === 0) return 0;
+
+    const culminadas = await EstudianteBecario.count({
+      where: { ...where, estado: 'Culminada' }
+    });
+
+    return ((culminadas / total) * 100).toFixed(1);
+  }
+
+  async calcularInversionTotal(where) {
+    // Simulación de cálculo de inversión basada en descuentos aplicados
+    const beneficiarios = await EstudianteBecario.findAll({
+      where,
+      attributes: ['tipoBeca', 'descuentoAplicado']
+    });
+
+    let inversionTotal = 0;
+    const costosPorTipo = {
+      'Ayudantía': 500,
+      'Impacto': 1000,
+      'Excelencia': 1500,
+      'Exoneración de Pago': 2000
+    };
+
+    beneficiarios.forEach(b => {
+      const costoBase = costosPorTipo[b.tipoBeca] || 500;
+      const descuento = b.descuentoAplicado || 0;
+      inversionTotal += costoBase * (1 + descuento / 100);
+    });
+
+    return inversionTotal;
+  }
+
+  async calcularTasaCumplimientoAyudantias(where) {
+    const ayudantes = await EstudianteBecario.findAll({
+      where,
+      attributes: ['horasCompletadas', 'horasRequeridas']
+    });
+
+    if (ayudantes.length === 0) return 0;
+
+    let cumpliendo = 0;
+    ayudantes.forEach(a => {
+      const porcentaje = (a.horasCompletadas / a.horasRequeridas) * 100;
+      if (porcentaje >= 70) cumpliendo++;
+    });
+
+    return ((cumpliendo / ayudantes.length) * 100).toFixed(1);
+  }
+
+  async identificarEstudiantesEnRiesgoDetallado(where) {
+    const semanaActual = this.calcularSemanaActual();
+    const porcentajeEsperado = (semanaActual / 12) * 100;
+
+    const ayudantes = await EstudianteBecario.findAll({
+      where: {
+        ...where,
+        estado: 'Activa'
+      },
+      include: [{
+        model: Usuario,
+        as: 'usuario',
+        attributes: ['nombre', 'apellido', 'email']
+      }]
+    });
+
+    const enRiesgo = [];
+    ayudantes.forEach(a => {
+      const porcentajeReal = (a.horasCompletadas / a.horasRequeridas) * 100;
+
+      if (porcentajeReal < porcentajeEsperado * 0.8) {
+        const semanasRestantes = 12 - semanaActual;
+        const horasRestantes = a.horasRequeridas - a.horasCompletadas;
+        const horasSemanalesRequeridas = horasRestantes / Math.max(semanasRestantes, 1);
+
+        enRiesgo.push({
+          nombre: `${a.usuario.nombre} ${a.usuario.apellido}`,
+          email: a.usuario.email,
+          horasCompletadas: a.horasCompletadas,
+          horasRequeridas: a.horasRequeridas,
+          porcentajeCompletado: porcentajeReal.toFixed(1),
+          horasRestantes,
+          semanasRestantes,
+          horasSemanalesRequeridas: horasSemanalesRequeridas.toFixed(1),
+          nivelRiesgo: porcentajeReal < porcentajeEsperado * 0.5 ? 'critico' : 'alto'
+        });
+      }
+    });
+
+    return enRiesgo.sort((a, b) => a.porcentajeCompletado - b.porcentajeCompletado);
+  }
+
+  async proyectarCulminacionAyudantias(where) {
+    const semanaActual = this.calcularSemanaActual();
+    const semanasRestantes = 12 - semanaActual;
+
+    const ayudantes = await EstudianteBecario.findAll({
+      where: {
+        ...where,
+        estado: 'Activa'
+      }
+    });
+
+    let cumpliran = 0;
+    let noCumpliran = 0;
+
+    ayudantes.forEach(a => {
+      const tasaSemanal = a.horasCompletadas / Math.max(semanaActual, 1);
+      const proyeccion = a.horasCompletadas + (tasaSemanal * semanasRestantes);
+
+      if (proyeccion >= a.horasRequeridas) {
+        cumpliran++;
+      } else {
+        noCumpliran++;
+      }
+    });
+
+    return {
+      cumpliran,
+      noCumpliran,
+      semanaActual,
+      semanasRestantes,
+      tasaExito: ayudantes.length > 0 ? ((cumpliran / ayudantes.length) * 100).toFixed(1) : 0
+    };
+  }
+
+  async generarMapaCalorBecasPorCarrera() {
+    // Por ahora retornamos datos simulados
+    // En producción, esto consultaría la tabla de usuarios con sus carreras
+    return {
+      carreras: ['Ingeniería', 'Administración', 'Derecho', 'Psicología', 'Comunicación'],
+      tiposBeca: ['Ayudantía', 'Impacto', 'Excelencia', 'Exoneración'],
+      valores: [
+        [15, 8, 12, 3],   // Ingeniería
+        [10, 12, 8, 5],   // Administración
+        [5, 6, 15, 2],    // Derecho
+        [8, 10, 6, 4],    // Psicología
+        [6, 8, 10, 3]     // Comunicación
+      ]
+    };
+  }
+
+  calcularSemanaActual() {
+    // Cálculo simplificado - en producción debería basarse en el calendario académico
+    const inicioTrimestre = moment('2024-09-01');
+    const ahora = moment();
+    const semanas = ahora.diff(inicioTrimestre, 'weeks');
+    return Math.min(Math.max(semanas, 1), 12);
+  }
+
+  calcularEficienciaGeneral(kpis) {
+    // Fórmula simplificada de eficiencia basada en múltiples métricas
+    let puntaje = 0;
+    let maxPuntaje = 0;
+
+    kpis.forEach(kpi => {
+      maxPuntaje += 100;
+
+      if (kpi.semaforo === 'verde') puntaje += 100;
+      else if (kpi.semaforo === 'amarillo') puntaje += 60;
+      else if (kpi.semaforo === 'rojo') puntaje += 20;
+    });
+
+    return maxPuntaje > 0 ? ((puntaje / maxPuntaje) * 100).toFixed(0) : 0;
+  }
+
+  /**
+   * Análisis de tendencias históricas
+   */
+  async analizarTendencias(periodos = []) {
+    if (periodos.length < 2) {
+      return { mensaje: 'Se requieren al menos 2 períodos para análisis de tendencias' };
+    }
+
+    const metricas = [];
+
+    for (const periodo of periodos) {
+      const [
+        postulaciones,
+        beneficiarios,
+        horasTotales,
+        tasaAprobacion
+      ] = await Promise.all([
+        Postulacion.count({ where: { trimestre: periodo } }),
+        EstudianteBecario.count({ where: { periodoInicio: periodo } }),
+        ReporteActividad.sum('horasTrabajadas', {
+          where: { periodoAcademico: periodo, estado: 'Aprobada' }
+        }),
+        this.calcularTasaAprobacion({ trimestre: periodo })
+      ]);
+
+      metricas.push({
+        periodo,
+        postulaciones,
+        beneficiarios,
+        horasTotales: horasTotales || 0,
+        tasaAprobacion
+      });
+    }
+
+    // Calcular tendencias
+    const tendencias = {
+      postulaciones: this.calcularTendenciaLineal(metricas.map(m => m.postulaciones)),
+      beneficiarios: this.calcularTendenciaLineal(metricas.map(m => m.beneficiarios)),
+      horasTotales: this.calcularTendenciaLineal(metricas.map(m => m.horasTotales)),
+      tasaAprobacion: this.calcularTendenciaLineal(metricas.map(m => parseFloat(m.tasaAprobacion)))
+    };
+
+    return {
+      metricas,
+      tendencias,
+      proyeccionProximoPeriodo: this.proyectarProximoPeriodo(tendencias, metricas)
+    };
+  }
+
+  calcularTendenciaLineal(valores) {
+    const n = valores.length;
+    if (n < 2) return { pendiente: 0, correlacion: 0 };
+
+    const sumX = (n * (n - 1)) / 2;
+    const sumY = valores.reduce((sum, val) => sum + val, 0);
+    const sumXY = valores.reduce((sum, val, i) => sum + (i * val), 0);
+    const sumX2 = (n * (n - 1) * (2 * n - 1)) / 6;
+    const sumY2 = valores.reduce((sum, val) => sum + (val * val), 0);
+
+    const pendiente = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercepto = (sumY - pendiente * sumX) / n;
+
+    // Calcular coeficiente de correlación
+    const mediaY = sumY / n;
+    const ssTotal = valores.reduce((sum, val) => sum + Math.pow(val - mediaY, 2), 0);
+    const ssResidual = valores.reduce((sum, val, i) => {
+      const predicho = pendiente * i + intercepto;
+      return sum + Math.pow(val - predicho, 2);
+    }, 0);
+
+    const r2 = ssTotal > 0 ? 1 - (ssResidual / ssTotal) : 0;
+
+    return {
+      pendiente: pendiente.toFixed(2),
+      intercepto: intercepto.toFixed(2),
+      correlacion: Math.sqrt(Math.max(r2, 0)).toFixed(2),
+      tendencia: pendiente > 0 ? 'creciente' : pendiente < 0 ? 'decreciente' : 'estable'
+    };
+  }
+
+  proyectarProximoPeriodo(tendencias, metricas) {
+    const ultimoPeriodo = metricas[metricas.length - 1];
+    const n = metricas.length;
+
+    return {
+      postulaciones: Math.round(
+        ultimoPeriodo.postulaciones + parseFloat(tendencias.postulaciones.pendiente)
+      ),
+      beneficiarios: Math.round(
+        ultimoPeriodo.beneficiarios + parseFloat(tendencias.beneficiarios.pendiente)
+      ),
+      horasTotales: Math.round(
+        ultimoPeriodo.horasTotales + parseFloat(tendencias.horasTotales.pendiente)
+      ),
+      tasaAprobacion: Math.min(100, Math.max(0,
+        parseFloat(ultimoPeriodo.tasaAprobacion) + parseFloat(tendencias.tasaAprobacion.pendiente)
+      )).toFixed(1),
+      confianza: this.calcularConfianzaProyeccion(tendencias)
+    };
+  }
+
+  calcularConfianzaProyeccion(tendencias) {
+    const correlaciones = [
+      parseFloat(tendencias.postulaciones.correlacion),
+      parseFloat(tendencias.beneficiarios.correlacion),
+      parseFloat(tendencias.horasTotales.correlacion),
+      parseFloat(tendencias.tasaAprobacion.correlacion)
+    ];
+
+    const promedioCorrelacion = correlaciones.reduce((sum, val) => sum + val, 0) / correlaciones.length;
+
+    if (promedioCorrelacion > 0.8) return 'alta';
+    if (promedioCorrelacion > 0.5) return 'media';
+    return 'baja';
+  }
+
+  /**
+   * Obtener alertas del sistema
+   * @param {Object} filtros - Filtros opcionales (periodoAcademico)
+   * @returns {Promise<Array>} - Array de alertas activas
+   */
+  async getAlertas(filtros = {}) {
+    const { periodoAcademico } = filtros;
+    const alertas = [];
+
+    try {
+      // Construir whereClause solo si hay periodo
+      const where = {};
+      if (periodoAcademico) where.periodoInicio = periodoAcademico;
+
+      // Alerta 1: Estudiantes en riesgo de incumplimiento
+      const estudiantesEnRiesgo = await this.identificarEstudiantesEnRiesgoDetallado(where);
+      if (estudiantesEnRiesgo.length > 0) {
+        alertas.push({
+          tipo: 'critico',
+          categoria: 'cumplimiento',
+          titulo: `${estudiantesEnRiesgo.length} estudiante(s) en riesgo de incumplimiento`,
+          descripcion: `Estudiantes con progreso por debajo del 80% del esperado para la semana actual`,
+          cantidad: estudiantesEnRiesgo.length,
+          prioridad: 'alta'
+        });
+      }
+
+      // Alerta 2: Ayudantías próximas a vencer sin completar horas
+      const ayudantiasProximasVencer = await EstudianteBecario.count({
+        where: {
+          ...where,
+          estado: 'Activa',
+          periodoFin: {
+            [Op.lte]: moment().add(2, 'weeks').toDate()
+          },
+          [Op.where]: sequelize.literal('"horasCompletadas" < "horasRequeridas"')
+        }
+      });
+
+      if (ayudantiasProximasVencer > 0) {
+        alertas.push({
+          tipo: 'advertencia',
+          categoria: 'plazo',
+          titulo: `${ayudantiasProximasVencer} ayudantía(s) próximas a vencer`,
+          descripcion: `Ayudantías que terminan en menos de 2 semanas con horas pendientes`,
+          cantidad: ayudantiasProximasVencer,
+          prioridad: 'media'
+        });
+      }
+
+      // Alerta 3: Reportes semanales pendientes de aprobación
+      const reportesPendientes = await ReporteActividad.count({
+        where: {
+          estado: 'Pendiente',
+          fecha: {
+            [Op.gte]: moment().subtract(1, 'week').toDate()
+          }
+        }
+      });
+
+      if (reportesPendientes > 5) {
+        alertas.push({
+          tipo: 'informacion',
+          categoria: 'revision',
+          titulo: `${reportesPendientes} reporte(s) pendientes de revisión`,
+          descripcion: `Reportes semanales esperando aprobación de supervisor`,
+          cantidad: reportesPendientes,
+          prioridad: 'baja'
+        });
+      }
+
+      // Alerta 4: Supervisores con alta carga de trabajo
+      const supervisoresSobrecargados = await EstudianteBecario.findAll({
+        where: {
+          ...where,
+          estado: 'Activa',
+          plazaAsignada: { [Op.not]: null }
+        },
+        attributes: [
+          [sequelize.col('plaza.supervisorResponsable'), 'supervisorId'],
+          [sequelize.fn('COUNT', sequelize.col('EstudianteBecario.id')), 'cantidad']
+        ],
+        include: [{
+          model: Plaza,
+          as: 'plaza',
+          required: true,
+          attributes: []
+        }],
+        group: ['plaza.supervisorResponsable'],
+        having: sequelize.literal('COUNT("EstudianteBecario"."id") > 5'),
+        raw: true
+      });
+
+      if (supervisoresSobrecargados.length > 0) {
+        alertas.push({
+          tipo: 'advertencia',
+          categoria: 'recursos',
+          titulo: `${supervisoresSobrecargados.length} supervisor(es) con alta carga`,
+          descripcion: `Supervisores con más de 5 ayudantes asignados`,
+          cantidad: supervisoresSobrecargados.length,
+          prioridad: 'media'
+        });
+      }
+
+      return alertas;
+    } catch (error) {
+      console.error('Error obteniendo alertas:', error);
+      // Retornar array vacío en caso de error para no romper el dashboard
+      return [];
+    }
+  }
+}
+
+module.exports = new DataAggregator();

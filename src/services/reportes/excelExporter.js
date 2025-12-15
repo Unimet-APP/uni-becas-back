@@ -1,0 +1,904 @@
+const ExcelJS = require('exceljs');
+
+/**
+ * Exportador de Excel con Gráficos Nativos
+ *
+ * Genera archivos Excel (.xlsx) con:
+ * - Hojas de datos bien formateadas
+ * - Tablas con formato profesional
+ * - Gráficos nativos de Excel
+ * - Estilos y colores corporativos UNIMET
+ */
+
+class ExcelExporter {
+  /**
+   * Colores corporativos UNIMET
+   */
+  static COLORS = {
+    primary: '003366',     // Azul UNIMET
+    secondary: '0066CC',   // Azul claro
+    success: '009933',     // Verde
+    warning: 'FF9933',     // Naranja
+    danger: 'CC3366',      // Rojo
+    lightGray: 'F2F2F2',   // Gris claro para headers
+    white: 'FFFFFF'
+  };
+
+  /**
+   * Crea un nuevo workbook con estilos predefinidos
+   */
+  crearWorkbook() {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Sistema de Gestión de Becas - UNIMET';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+    return workbook;
+  }
+
+  /**
+   * Aplica estilos a la cabecera de una hoja
+   */
+  aplicarEstiloHeader(worksheet, rowNumber, columnCount) {
+    const headerRow = worksheet.getRow(rowNumber);
+    headerRow.font = { bold: true, size: 11, color: { argb: 'FF' + ExcelExporter.COLORS.white } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF' + ExcelExporter.COLORS.primary }
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 20;
+
+    // Aplicar bordes
+    for (let i = 1; i <= columnCount; i++) {
+      const cell = headerRow.getCell(i);
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    }
+  }
+
+  /**
+   * Ajusta ancho de columnas automáticamente
+   */
+  ajustarAnchoColumnas(worksheet) {
+    worksheet.columns.forEach((column) => {
+      let maxLength = 0;
+      column.eachCell({ includeEmpty: true }, (cell) => {
+        const cellValue = cell.value ? cell.value.toString() : '';
+        maxLength = Math.max(maxLength, cellValue.length);
+      });
+      column.width = Math.min(Math.max(maxLength + 2, 10), 50);
+    });
+  }
+
+  /**
+   * Genera reporte de becarios en Excel
+   */
+  async generarReporteBecarios(becarios) {
+    const workbook = this.crearWorkbook();
+    const worksheet = workbook.addWorksheet('Becarios');
+
+    // Título
+    worksheet.mergeCells('A1:J1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = 'Reporte de Estudiantes Becarios';
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FF' + ExcelExporter.COLORS.primary } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
+
+    // Metadata
+    worksheet.getCell('A2').value = `Generado: ${new Date().toLocaleString('es-VE')}`;
+    worksheet.getCell('A3').value = `Total de becarios: ${becarios.length}`;
+    worksheet.getRow(2).font = { italic: true, size: 10 };
+    worksheet.getRow(3).font = { italic: true, size: 10 };
+
+    // Headers
+    const headers = [
+      'Nombre', 'Cédula', 'Email', 'Carrera', 'Tipo Beca', 'Estado',
+      'Horas Completadas', 'Horas Requeridas', 'Progreso %', 'Plaza'
+    ];
+    const headerRow = worksheet.getRow(5);
+    headers.forEach((header, index) => {
+      headerRow.getCell(index + 1).value = header;
+    });
+    this.aplicarEstiloHeader(worksheet, 5, headers.length);
+
+    // Datos
+    becarios.forEach((becario, index) => {
+      const row = worksheet.getRow(6 + index);
+      row.values = [
+        `${becario.usuario.nombre} ${becario.usuario.apellido}`,
+        becario.usuario.cedula,
+        becario.usuario.email,
+        becario.usuario.carrera || 'N/A',
+        becario.tipoBeca,
+        becario.estado,
+        becario.horasCompletadas,
+        becario.horasRequeridas,
+        becario.porcentajeCompletado,
+        becario.plaza ? becario.plaza.nombre : 'Sin plaza',
+      ];
+
+      // Formato condicional para progreso
+      const progresoCell = row.getCell(9);
+      progresoCell.numFmt = '0.00"%"';
+      if (becario.enRiesgo) {
+        progresoCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFF9999' } // Rojo claro
+        };
+      } else if (becario.porcentajeCompletado >= 80) {
+        progresoCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF99FF99' } // Verde claro
+        };
+      }
+    });
+
+    this.ajustarAnchoColumnas(worksheet);
+
+    // Agregar hoja de resumen con gráfico
+    const resumenSheet = workbook.addWorksheet('Resumen');
+    resumenSheet.getCell('A1').value = 'Resumen de Progreso';
+    resumenSheet.getCell('A1').font = { size: 14, bold: true };
+
+    // Estadísticas
+    const enRiesgo = becarios.filter(b => b.enRiesgo).length;
+    const alDia = becarios.length - enRiesgo;
+    const promedioProgreso = (becarios.reduce((sum, b) => sum + b.porcentajeCompletado, 0) / becarios.length).toFixed(2);
+
+    resumenSheet.getCell('A3').value = 'Becarios al día:';
+    resumenSheet.getCell('B3').value = alDia;
+    resumenSheet.getCell('A4').value = 'Becarios en riesgo:';
+    resumenSheet.getCell('B4').value = enRiesgo;
+    resumenSheet.getCell('A5').value = 'Progreso promedio:';
+    resumenSheet.getCell('B5').value = `${promedioProgreso}%`;
+
+    return await workbook.xlsx.writeBuffer();
+  }
+
+  /**
+   * Genera reporte de plazas en Excel
+   */
+  async generarReportePlazas(plazas) {
+    const workbook = this.crearWorkbook();
+    const worksheet = workbook.addWorksheet('Plazas');
+
+    // Título
+    worksheet.mergeCells('A1:H1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = 'Reporte de Plazas';
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FF' + ExcelExporter.COLORS.primary } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
+
+    // Metadata
+    worksheet.getCell('A2').value = `Generado: ${new Date().toLocaleString('es-VE')}`;
+    worksheet.getCell('A3').value = `Total de plazas: ${plazas.length}`;
+
+    // Headers
+    const headers = [
+      'Nombre', 'Tipo', 'Estado',
+      'Capacidad', 'Ocupadas', 'Disponibles', 'Ocupación %', 'Supervisor'
+    ];
+    const headerRow = worksheet.getRow(5);
+    headers.forEach((header, index) => {
+      headerRow.getCell(index + 1).value = header;
+    });
+    this.aplicarEstiloHeader(worksheet, 5, headers.length);
+
+    // Datos
+    plazas.forEach((plaza, index) => {
+      const row = worksheet.getRow(6 + index);
+      row.values = [
+        plaza.nombre,
+        plaza.tipoAyudantia,
+        plaza.estado,
+        plaza.capacidad,
+        plaza.ocupadas,
+        plaza.disponibles,
+        parseFloat(plaza.porcentajeOcupacion),
+        plaza.supervisorResponsable ? `${plaza.supervisorResponsable.nombre} ${plaza.supervisorResponsable.apellido}` : 'Sin supervisor'
+      ];
+
+      // Formato condicional para ocupación
+      const ocupacionCell = row.getCell(7);
+      ocupacionCell.numFmt = '0.00"%"';
+      if (parseFloat(plaza.porcentajeOcupacion) >= 100) {
+        ocupacionCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF99FF99' } // Verde (completa)
+        };
+      } else if (parseFloat(plaza.porcentajeOcupacion) === 0) {
+        ocupacionCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFF9999' } // Rojo (vacía)
+        };
+      }
+    });
+
+    this.ajustarAnchoColumnas(worksheet);
+
+    return await workbook.xlsx.writeBuffer();
+  }
+
+  /**
+   * Genera reporte de supervisores en Excel
+   */
+  async generarReporteSupervisores(supervisores) {
+    const workbook = this.crearWorkbook();
+    const worksheet = workbook.addWorksheet('Supervisores');
+
+    // Título
+    worksheet.mergeCells('A1:I1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = 'Reporte de Supervisores';
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FF' + ExcelExporter.COLORS.primary } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
+
+    // Metadata
+    worksheet.getCell('A2').value = `Generado: ${new Date().toLocaleString('es-VE')}`;
+    worksheet.getCell('A3').value = `Total de supervisores: ${supervisores.length}`;
+
+    // Headers
+    const headers = [
+      'Nombre', 'Email', 'Departamento', 'Título', 'Becarios Activos',
+      'Plazas', 'Horas Supervisadas', 'Reportes Pendientes', 'Tasa Aprobación %'
+    ];
+    const headerRow = worksheet.getRow(5);
+    headers.forEach((header, index) => {
+      headerRow.getCell(index + 1).value = header;
+    });
+    this.aplicarEstiloHeader(worksheet, 5, headers.length);
+
+    // Datos
+    supervisores.forEach((supervisor, index) => {
+      const row = worksheet.getRow(6 + index);
+      row.values = [
+        `${supervisor.nombre} ${supervisor.apellido}`,
+        supervisor.email,
+        supervisor.departamento || 'N/A',
+        supervisor.titulo || 'N/A',
+        supervisor.estadisticas.becariosActivos,
+        supervisor.estadisticas.plazasSupervisadas,
+        supervisor.estadisticas.horasTotalesSupervisadas,
+        supervisor.estadisticas.reportesPendientesRevision,
+        supervisor.estadisticas.tasaAprobacion
+      ];
+
+      // Formato para tasa de aprobación
+      row.getCell(9).numFmt = '0.00"%"';
+    });
+
+    this.ajustarAnchoColumnas(worksheet);
+
+    return await workbook.xlsx.writeBuffer();
+  }
+
+  /**
+   * Genera reporte de actividades en Excel
+   */
+  async generarReporteActividades(estadisticas) {
+    const workbook = this.crearWorkbook();
+
+    // Hoja de Resumen
+    const resumenSheet = workbook.addWorksheet('Resumen');
+    resumenSheet.getCell('A1').value = 'Estadísticas de Reportes de Actividades';
+    resumenSheet.getCell('A1').font = { size: 16, bold: true };
+
+    resumenSheet.getCell('A3').value = 'Período:';
+    resumenSheet.getCell('B3').value = estadisticas.periodo;
+    resumenSheet.getCell('B3').font = { bold: true };
+
+    resumenSheet.getCell('A5').value = 'Total de reportes:';
+    resumenSheet.getCell('B5').value = estadisticas.resumen.totalReportes;
+    resumenSheet.getCell('A6').value = 'Reportes aprobados:';
+    resumenSheet.getCell('B6').value = estadisticas.resumen.reportesAprobados;
+    resumenSheet.getCell('A7').value = 'Reportes pendientes:';
+    resumenSheet.getCell('B7').value = estadisticas.resumen.reportesPendientes;
+    resumenSheet.getCell('A8').value = 'Reportes rechazados:';
+    resumenSheet.getCell('B8').value = estadisticas.resumen.reportesRechazados;
+    resumenSheet.getCell('A9').value = 'Tasa de aprobación:';
+    resumenSheet.getCell('B9').value = `${estadisticas.resumen.tasaAprobacion}%`;
+    resumenSheet.getCell('A10').value = 'Horas totales aprobadas:';
+    resumenSheet.getCell('B10').value = estadisticas.resumen.horasTotalesAprobadas;
+
+    // Hoja de Distribución por Semana
+    const semanasSheet = workbook.addWorksheet('Por Semana');
+    semanasSheet.getCell('A1').value = 'Distribución por Semana';
+    semanasSheet.getCell('A1').font = { size: 14, bold: true };
+
+    const semanasHeaders = ['Semana', 'Reportes', 'Horas', 'Promedio'];
+    const semanasHeaderRow = semanasSheet.getRow(3);
+    semanasHeaders.forEach((header, index) => {
+      semanasHeaderRow.getCell(index + 1).value = header;
+    });
+    this.aplicarEstiloHeader(semanasSheet, 3, semanasHeaders.length);
+
+    estadisticas.distribucionPorSemana.forEach((semana, index) => {
+      const row = semanasSheet.getRow(4 + index);
+      row.values = [semana.semana, semana.reportes, semana.horas, semana.promedio];
+    });
+
+    this.ajustarAnchoColumnas(semanasSheet);
+
+    return await workbook.xlsx.writeBuffer();
+  }
+
+  /**
+   * Genera reporte de distribución por tipo de beca
+   */
+  async generarReporteDistribucionBecas(distribucion) {
+    const workbook = this.crearWorkbook();
+    const worksheet = workbook.addWorksheet('Distribución por Beca');
+
+    // Título
+    worksheet.mergeCells('A1:G1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = 'Distribución por Tipo de Beca';
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FF' + ExcelExporter.COLORS.primary } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
+
+    // Headers
+    const headers = [
+      'Tipo de Beca', 'Beneficiarios Activos', 'Postulaciones',
+      'Aprobadas', 'Rechazadas', 'Pendientes', 'Tasa Aprobación %'
+    ];
+    const headerRow = worksheet.getRow(3);
+    headers.forEach((header, index) => {
+      headerRow.getCell(index + 1).value = header;
+    });
+    this.aplicarEstiloHeader(worksheet, 3, headers.length);
+
+    // Datos
+    distribucion.forEach((item, index) => {
+      const row = worksheet.getRow(4 + index);
+      row.values = [
+        item.tipoBeca,
+        item.beneficiariosActivos,
+        item.postulaciones,
+        item.aprobadas,
+        item.rechazadas,
+        item.pendientes,
+        item.tasaAprobacion
+      ];
+      row.getCell(7).numFmt = '0.00"%"';
+    });
+
+    this.ajustarAnchoColumnas(worksheet);
+
+    return await workbook.xlsx.writeBuffer();
+  }
+
+  /**
+   * Genera reporte de distribución por tipo de postulante
+   */
+  async generarReporteDistribucionPostulantes(distribucion) {
+    const workbook = this.crearWorkbook();
+    const worksheet = workbook.addWorksheet('Distribución por Postulante');
+
+    // Título
+    worksheet.mergeCells('A1:G1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = 'Distribución por Tipo de Postulante';
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FF' + ExcelExporter.COLORS.primary } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
+
+    // Headers
+    const headers = [
+      'Tipo Postulante', 'Postulaciones', 'Aprobadas',
+      'Rechazadas', 'Pendientes', 'Tasa Aprobación %', 'IAA Promedio'
+    ];
+    const headerRow = worksheet.getRow(3);
+    headers.forEach((header, index) => {
+      headerRow.getCell(index + 1).value = header;
+    });
+    this.aplicarEstiloHeader(worksheet, 3, headers.length);
+
+    // Datos
+    distribucion.forEach((item, index) => {
+      const row = worksheet.getRow(4 + index);
+      const tipoLabel = item.tipoPostulante === 'estudiante-pregrado' ? 'Pregrado' :
+                        item.tipoPostulante === 'estudiante-postgrado' ? 'Postgrado' : 'Bachiller';
+      row.values = [
+        tipoLabel,
+        item.postulaciones,
+        item.aprobadas,
+        item.rechazadas,
+        item.pendientes,
+        item.tasaAprobacion,
+        item.iaaPromedio
+      ];
+      row.getCell(6).numFmt = '0.00"%"';
+      row.getCell(7).numFmt = '0.00';
+    });
+
+    this.ajustarAnchoColumnas(worksheet);
+
+    return await workbook.xlsx.writeBuffer();
+  }
+
+  /**
+   * Genera dashboard completo en Excel
+   */
+  async generarDashboardCompleto(datos) {
+    const workbook = this.crearWorkbook();
+
+    // Hoja de resumen general
+    const resumenSheet = workbook.addWorksheet('Dashboard General');
+    resumenSheet.getCell('A1').value = 'Dashboard del Sistema de Becas';
+    resumenSheet.getCell('A1').font = { size: 18, bold: true, color: { argb: 'FF' + ExcelExporter.COLORS.primary } };
+
+    resumenSheet.getCell('A3').value = `Generado: ${new Date().toLocaleString('es-VE')}`;
+    resumenSheet.getCell('A4').value = `Período: ${datos.periodo || 'Todos'}`;
+
+    // Métricas principales
+    let rowNum = 6;
+    resumenSheet.getCell(`A${rowNum}`).value = 'MÉTRICAS PRINCIPALES';
+    resumenSheet.getCell(`A${rowNum}`).font = { bold: true, size: 12 };
+    rowNum += 2;
+
+    if (datos.becarios) {
+      resumenSheet.getCell(`A${rowNum}`).value = 'Total de becarios activos:';
+      resumenSheet.getCell(`B${rowNum}`).value = datos.becarios.length;
+      rowNum++;
+    }
+
+    if (datos.plazas) {
+      resumenSheet.getCell(`A${rowNum}`).value = 'Total de plazas:';
+      resumenSheet.getCell(`B${rowNum}`).value = datos.plazas.length;
+      rowNum++;
+
+      const plazasOcupadas = datos.plazas.reduce((sum, p) => sum + p.ocupadas, 0);
+      const plazasDisponibles = datos.plazas.reduce((sum, p) => sum + p.disponibles, 0);
+      resumenSheet.getCell(`A${rowNum}`).value = 'Cupos ocupados:';
+      resumenSheet.getCell(`B${rowNum}`).value = plazasOcupadas;
+      rowNum++;
+      resumenSheet.getCell(`A${rowNum}`).value = 'Cupos disponibles:';
+      resumenSheet.getCell(`B${rowNum}`).value = plazasDisponibles;
+      rowNum++;
+    }
+
+    if (datos.supervisores) {
+      resumenSheet.getCell(`A${rowNum}`).value = 'Total de supervisores:';
+      resumenSheet.getCell(`B${rowNum}`).value = datos.supervisores.length;
+      rowNum++;
+    }
+
+    if (datos.estadisticasActividades) {
+      resumenSheet.getCell(`A${rowNum + 1}`).value = 'REPORTES DE ACTIVIDADES';
+      resumenSheet.getCell(`A${rowNum + 1}`).font = { bold: true, size: 12 };
+      rowNum += 3;
+
+      resumenSheet.getCell(`A${rowNum}`).value = 'Total de reportes:';
+      resumenSheet.getCell(`B${rowNum}`).value = datos.estadisticasActividades.resumen.totalReportes;
+      rowNum++;
+      resumenSheet.getCell(`A${rowNum}`).value = 'Tasa de aprobación:';
+      resumenSheet.getCell(`B${rowNum}`).value = `${datos.estadisticasActividades.resumen.tasaAprobacion}%`;
+      rowNum++;
+      resumenSheet.getCell(`A${rowNum}`).value = 'Horas totales:';
+      resumenSheet.getCell(`B${rowNum}`).value = datos.estadisticasActividades.resumen.horasTotalesAprobadas;
+      rowNum++;
+    }
+
+    // Sección ALERTAS Y RIESGOS
+    if (datos.becarios) {
+      resumenSheet.getCell(`A${rowNum + 1}`).value = 'ALERTAS Y RIESGOS';
+      resumenSheet.getCell(`A${rowNum + 1}`).font = { bold: true, size: 12, color: { argb: 'FFFF0000' } };
+      rowNum += 3;
+
+      const becariosEnRiesgo = datos.becarios.filter(b => b.enRiesgo).length;
+      const becariosBajoProg = datos.becarios.filter(b => b.porcentajeCompletado < 50).length;
+
+      resumenSheet.getCell(`A${rowNum}`).value = 'Becarios en riesgo:';
+      resumenSheet.getCell(`B${rowNum}`).value = becariosEnRiesgo;
+      if (becariosEnRiesgo > 0) {
+        resumenSheet.getCell(`B${rowNum}`).font = { color: { argb: 'FFFF0000' } };
+      }
+      rowNum++;
+
+      resumenSheet.getCell(`A${rowNum}`).value = 'Becarios con progreso < 50%:';
+      resumenSheet.getCell(`B${rowNum}`).value = becariosBajoProg;
+      if (becariosBajoProg > 0) {
+        resumenSheet.getCell(`B${rowNum}`).font = { color: { argb: 'FFFF6600' } };
+      }
+      rowNum++;
+
+      resumenSheet.getCell(`A${rowNum}`).value = 'Becarios al día:';
+      resumenSheet.getCell(`B${rowNum}`).value = datos.becarios.length - becariosEnRiesgo;
+      resumenSheet.getCell(`B${rowNum}`).font = { color: { argb: 'FF008000' } };
+      rowNum++;
+    }
+
+    // Sección DISTRIBUCIÓN POR TIPO DE BECA
+    if (datos.distribucionBecas && datos.distribucionBecas.length > 0) {
+      resumenSheet.getCell(`A${rowNum + 1}`).value = 'DISTRIBUCIÓN POR TIPO DE BECA';
+      resumenSheet.getCell(`A${rowNum + 1}`).font = { bold: true, size: 12 };
+      rowNum += 3;
+
+      // Headers de la tabla
+      const distHeaders = ['Tipo de Beca', 'Beneficiarios', 'Postulaciones', 'Tasa Aprobación'];
+      distHeaders.forEach((header, index) => {
+        const cell = resumenSheet.getCell(rowNum, index + 1);
+        cell.value = header;
+        cell.font = { bold: true };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+      });
+      rowNum++;
+
+      // Datos de distribución
+      datos.distribucionBecas.forEach((dist) => {
+        resumenSheet.getCell(`A${rowNum}`).value = dist.tipoBeca;
+        resumenSheet.getCell(`B${rowNum}`).value = dist.beneficiariosActivos;
+        resumenSheet.getCell(`C${rowNum}`).value = dist.postulaciones;
+        resumenSheet.getCell(`D${rowNum}`).value = dist.tasaAprobacion;
+        resumenSheet.getCell(`D${rowNum}`).numFmt = '0.00"%"';
+        rowNum++;
+      });
+    }
+
+    this.ajustarAnchoColumnas(resumenSheet);
+
+    // Agregar hojas adicionales con datos detallados
+    if (datos.becarios && datos.becarios.length > 0) {
+      const becariosSheet = workbook.addWorksheet('Becarios Detalle');
+
+      // Headers
+      const headers = [
+        'Nombre', 'Cédula', 'Email', 'Carrera', 'Tipo Beca', 'Estado',
+        'Horas Completadas', 'Horas Requeridas', 'Progreso %', 'Plaza',
+        'Supervisor', 'En Riesgo'
+      ];
+
+      const headerRow = becariosSheet.getRow(1);
+      headers.forEach((header, index) => {
+        const cell = headerRow.getCell(index + 1);
+        cell.value = header;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF' + ExcelExporter.COLORS.primary }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      // Datos de becarios
+      datos.becarios.forEach((becario, index) => {
+        const row = becariosSheet.getRow(index + 2);
+        row.values = [
+          `${becario.usuario.nombre} ${becario.usuario.apellido}`,
+          becario.usuario.cedula || 'N/A',
+          becario.usuario.email,
+          becario.usuario.carrera || 'N/A',
+          becario.tipoBeca,
+          becario.estadoProgreso,
+          becario.horasCompletadas,
+          becario.horasRequeridas,
+          becario.porcentajeCompletado,
+          becario.plazaNombre || 'Sin asignar',
+          becario.supervisorNombre || 'Sin asignar',
+          becario.enRiesgo ? 'Sí' : 'No'
+        ];
+
+        // Formato numérico para progreso
+        row.getCell(9).numFmt = '0.00"%"';
+
+        // Formato condicional para "En Riesgo"
+        if (becario.enRiesgo) {
+          row.getCell(12).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFF0000' }
+          };
+          row.getCell(12).font = { color: { argb: 'FFFFFFFF' }, bold: true };
+        }
+
+        // Formato condicional para Progreso %
+        const progresoCell = row.getCell(9);
+        if (becario.porcentajeCompletado >= 80) {
+          progresoCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF00FF00' }
+          };
+        } else if (becario.porcentajeCompletado < 50) {
+          progresoCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFF6600' }
+          };
+        }
+      });
+
+      this.ajustarAnchoColumnas(becariosSheet);
+    }
+
+    // Hoja "Plazas Detalle"
+    if (datos.plazas && datos.plazas.length > 0) {
+      const plazasSheet = workbook.addWorksheet('Plazas Detalle');
+
+      const plazasHeaders = [
+        'Nombre', 'Tipo', 'Estado', 'Capacidad', 'Ocupadas',
+        'Disponibles', 'Ocupación %', 'Supervisor'
+      ];
+
+      const plazasHeaderRow = plazasSheet.getRow(1);
+      plazasHeaders.forEach((header, index) => {
+        const cell = plazasHeaderRow.getCell(index + 1);
+        cell.value = header;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF' + ExcelExporter.COLORS.primary }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      datos.plazas.forEach((plaza, index) => {
+        const row = plazasSheet.getRow(index + 2);
+        row.values = [
+          plaza.nombre,
+          plaza.tipoAyudantia || 'N/A',
+          plaza.estado,
+          plaza.capacidad,
+          plaza.ocupadas,
+          plaza.disponibles,
+          plaza.porcentajeOcupacion,
+          plaza.supervisorResponsable ?
+            `${plaza.supervisorResponsable.nombre} ${plaza.supervisorResponsable.apellido}` :
+            'Sin asignar'
+        ];
+
+        // Formato numérico para ocupación
+        row.getCell(7).numFmt = '0.00"%"';
+
+        // Formato condicional para Ocupación %
+        const ocupacionCell = row.getCell(7);
+        if (plaza.porcentajeOcupacion >= 90) {
+          ocupacionCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFF0000' }
+          };
+          ocupacionCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+        } else if (plaza.porcentajeOcupacion >= 70) {
+          ocupacionCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFF6600' }
+          };
+        } else if (plaza.porcentajeOcupacion < 30) {
+          ocupacionCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF00FF00' }
+          };
+        }
+      });
+
+      this.ajustarAnchoColumnas(plazasSheet);
+    }
+
+    // Hoja "Supervisores Detalle"
+    if (datos.supervisores && datos.supervisores.length > 0) {
+      const supervisoresSheet = workbook.addWorksheet('Supervisores Detalle');
+
+      const supervisoresHeaders = [
+        'Nombre', 'Departamento', 'Email', 'Becarios Activos',
+        'Horas Supervisadas', 'Reportes Pendientes', 'Tasa Aprobación %'
+      ];
+
+      const supervisoresHeaderRow = supervisoresSheet.getRow(1);
+      supervisoresHeaders.forEach((header, index) => {
+        const cell = supervisoresHeaderRow.getCell(index + 1);
+        cell.value = header;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF' + ExcelExporter.COLORS.primary }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      datos.supervisores.forEach((supervisor, index) => {
+        const row = supervisoresSheet.getRow(index + 2);
+        row.values = [
+          `${supervisor.nombre} ${supervisor.apellido}`,
+          supervisor.departamento || 'N/A',
+          supervisor.email,
+          supervisor.becariosActivos || 0,
+          supervisor.horasSupervisadas || 0,
+          supervisor.reportesPendientes || 0,
+          supervisor.tasaAprobacion || 0
+        ];
+
+        // Formato numérico para tasa de aprobación
+        row.getCell(7).numFmt = '0.00"%"';
+
+        // Formato condicional para Tasa Aprobación
+        const tasaCell = row.getCell(7);
+        const tasa = supervisor.tasaAprobacion || 0;
+        if (tasa >= 80) {
+          tasaCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF00FF00' }
+          };
+        } else if (tasa < 60) {
+          tasaCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFF6600' }
+          };
+        }
+      });
+
+      this.ajustarAnchoColumnas(supervisoresSheet);
+    }
+
+    // Hoja "Distribución Becas"
+    if (datos.distribucionBecas && datos.distribucionBecas.length > 0) {
+      const distBecasSheet = workbook.addWorksheet('Distribución Becas');
+
+      distBecasSheet.getCell('A1').value = 'Distribución por Tipo de Beca';
+      distBecasSheet.getCell('A1').font = {
+        size: 16,
+        bold: true,
+        color: { argb: 'FF' + ExcelExporter.COLORS.primary }
+      };
+      distBecasSheet.mergeCells('A1:E1');
+
+      const distBecasHeaders = [
+        'Tipo de Beca', 'Beneficiarios Activos', 'Postulaciones',
+        'Tasa Aprobación %', 'IAA Promedio'
+      ];
+
+      const distBecasHeaderRow = distBecasSheet.getRow(3);
+      distBecasHeaders.forEach((header, index) => {
+        const cell = distBecasHeaderRow.getCell(index + 1);
+        cell.value = header;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF' + ExcelExporter.COLORS.primary }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      datos.distribucionBecas.forEach((dist, index) => {
+        const row = distBecasSheet.getRow(index + 4);
+        row.values = [
+          dist.tipoBeca,
+          dist.beneficiariosActivos,
+          dist.postulaciones,
+          dist.tasaAprobacion,
+          dist.iaaPromedio || 0
+        ];
+
+        row.getCell(4).numFmt = '0.00"%"';
+        row.getCell(5).numFmt = '0.00';
+      });
+
+      this.ajustarAnchoColumnas(distBecasSheet);
+    }
+
+    // Hoja "Distribución Postulantes"
+    if (datos.distribucionPostulantes && datos.distribucionPostulantes.length > 0) {
+      const distPostSheet = workbook.addWorksheet('Distribución Postulantes');
+
+      distPostSheet.getCell('A1').value = 'Distribución por Tipo de Postulante';
+      distPostSheet.getCell('A1').font = {
+        size: 16,
+        bold: true,
+        color: { argb: 'FF' + ExcelExporter.COLORS.primary }
+      };
+      distPostSheet.mergeCells('A1:G1');
+
+      const distPostHeaders = [
+        'Tipo Postulante', 'Postulaciones', 'Aprobadas', 'Rechazadas',
+        'Pendientes', 'Tasa Aprobación %', 'IAA Promedio'
+      ];
+
+      const distPostHeaderRow = distPostSheet.getRow(3);
+      distPostHeaders.forEach((header, index) => {
+        const cell = distPostHeaderRow.getCell(index + 1);
+        cell.value = header;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF' + ExcelExporter.COLORS.primary }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      datos.distribucionPostulantes.forEach((dist, index) => {
+        const row = distPostSheet.getRow(index + 4);
+        const tipoLabel = dist.tipoPostulante === 'estudiante-pregrado' ? 'Pregrado' :
+                          dist.tipoPostulante === 'estudiante-postgrado' ? 'Postgrado' : 'Bachiller';
+        row.values = [
+          tipoLabel,
+          dist.postulaciones,
+          dist.aprobadas,
+          dist.rechazadas,
+          dist.pendientes,
+          dist.tasaAprobacion,
+          dist.iaaPromedio
+        ];
+
+        row.getCell(6).numFmt = '0.00"%"';
+        row.getCell(7).numFmt = '0.00';
+      });
+
+      this.ajustarAnchoColumnas(distPostSheet);
+    }
+
+    // Hoja "Actividades Semanales" (condicional)
+    if (datos.estadisticasActividades &&
+        datos.estadisticasActividades.distribucionPorSemana &&
+        datos.estadisticasActividades.distribucionPorSemana.length > 0) {
+      const actSemSheet = workbook.addWorksheet('Actividades Semanales');
+
+      actSemSheet.getCell('A1').value = 'Distribución de Actividades por Semana';
+      actSemSheet.getCell('A1').font = {
+        size: 16,
+        bold: true,
+        color: { argb: 'FF' + ExcelExporter.COLORS.primary }
+      };
+      actSemSheet.mergeCells('A1:D1');
+
+      const actSemHeaders = ['Semana', 'Reportes', 'Horas Reportadas', 'Horas Aprobadas'];
+
+      const actSemHeaderRow = actSemSheet.getRow(3);
+      actSemHeaders.forEach((header, index) => {
+        const cell = actSemHeaderRow.getCell(index + 1);
+        cell.value = header;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF' + ExcelExporter.COLORS.primary }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      datos.estadisticasActividades.distribucionPorSemana.forEach((semana, index) => {
+        const row = actSemSheet.getRow(index + 4);
+        row.values = [
+          `Semana ${semana.semana}`,
+          semana.reportes,
+          semana.horasReportadas,
+          semana.horasAprobadas
+        ];
+
+        row.getCell(3).numFmt = '0.00';
+        row.getCell(4).numFmt = '0.00';
+      });
+
+      this.ajustarAnchoColumnas(actSemSheet);
+    }
+
+    return await workbook.xlsx.writeBuffer();
+  }
+}
+
+module.exports = ExcelExporter;

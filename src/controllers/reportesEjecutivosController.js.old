@@ -1,0 +1,195 @@
+// Lazy loading del servicio de reportes para evitar errores de dependencias
+let reportesService;
+function getReportesService() {
+  if (!reportesService) {
+    try {
+      reportesService = require('../services/reportes/reportesService');
+    } catch (error) {
+      console.error('Error cargando servicio de reportes:', error.message);
+      throw new Error('El módulo de reportes ejecutivos no está disponible. Por favor, instale las dependencias necesarias.');
+    }
+  }
+  return reportesService;
+}
+const { sendSuccess } = require('../config/responses');
+const { asyncHandler } = require('../middleware/errorHandler');
+const ApiError = require('../utils/ApiError');
+const path = require('path');
+const fs = require('fs').promises;
+
+class ReportesEjecutivosController {
+  /**
+   * Validar permisos administrativos
+   * @private
+   */
+  _validarPermisosAdmin(user) {
+    const rolesPermitidos = ['admin', 'gestor-becas', 'capital-humano', 'director-area'];
+
+    if (!rolesPermitidos.includes(user.role)) {
+      throw ApiError.forbidden('Solo usuarios administrativos pueden acceder a los reportes ejecutivos');
+    }
+  }
+
+  /**
+   * Validar formato de salida
+   * @private
+   */
+  _validarFormato(formato) {
+    const formatosValidos = ['pdf', 'excel', 'json'];
+
+    if (!formatosValidos.includes(formato)) {
+      throw ApiError.badRequest(`Formato inválido. Los formatos válidos son: ${formatosValidos.join(', ')}`);
+    }
+  }
+
+  /**
+   * GET /api/v1/reportes-ejecutivos/informe-ejecutivo
+   * Generar Informe Ejecutivo de Período Académico
+   */
+  generarInformeEjecutivo = asyncHandler(async (req, res) => {
+    this._validarPermisosAdmin(req.user);
+
+    const {
+      periodo = null,
+      formato = 'pdf',
+      incluirGraficos = true,
+      incluirProyecciones = true
+    } = req.query;
+
+    this._validarFormato(formato);
+
+    // Generar el reporte (el servicio ya retorna el formato correcto)
+    const resultado = await getReportesService().generarInformeEjecutivo(periodo, formato);
+
+    // Retornar según el formato solicitado
+    if (formato === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="informe-ejecutivo-${periodo || 'actual'}.pdf"`);
+      return res.send(resultado);
+    } else if (formato === 'excel') {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="informe-ejecutivo-${periodo || 'actual'}.xlsx"`);
+      return res.send(resultado);
+    } else {
+      return sendSuccess(res, resultado, 'Informe ejecutivo generado exitosamente');
+    }
+  });
+
+  /**
+   * GET /api/v1/reportes-ejecutivos/operativo-supervision
+   * Generar Reporte Operativo de Supervisión
+   */
+  generarReporteOperativo = asyncHandler(async (req, res) => {
+    this._validarPermisosAdmin(req.user);
+
+    const {
+      periodo = null,
+      formato = 'pdf',
+      supervisorId = null,
+      departamento = null
+    } = req.query;
+
+    this._validarFormato(formato);
+
+    // Generar el reporte con filtros opcionales
+    const filtros = {};
+    if (periodo) filtros.periodoAcademico = periodo;
+    if (supervisorId) filtros.supervisorId = supervisorId;
+    if (departamento) filtros.departamento = departamento;
+
+    const resultado = await getReportesService().generarReporteOperativoSupervision(filtros, formato);
+
+    // Retornar según el formato solicitado
+    if (formato === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="reporte-operativo-${periodo || 'actual'}.pdf"`);
+      return res.send(resultado);
+    } else if (formato === 'excel') {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="reporte-operativo-${periodo || 'actual'}.xlsx"`);
+      return res.send(resultado);
+    } else {
+      return sendSuccess(res, resultado, 'Reporte operativo generado exitosamente');
+    }
+  });
+
+  /**
+   * GET /api/v1/reportes-ejecutivos/dashboard-cumplimiento
+   * Generar Dashboard de Cumplimiento y Rendimiento
+   */
+  generarDashboardCumplimiento = asyncHandler(async (req, res) => {
+    this._validarPermisosAdmin(req.user);
+
+    const {
+      periodo = null,
+      formato = 'pdf',
+      tipoBeca = null,
+      departamento = null,
+      nivelRiesgo = null
+    } = req.query;
+
+    this._validarFormato(formato);
+
+    // Generar el dashboard con filtros opcionales
+    const filtros = {};
+    if (periodo) filtros.periodoAcademico = periodo;
+    if (tipoBeca) filtros.tipoBeca = tipoBeca;
+    if (departamento) filtros.departamento = departamento;
+    if (nivelRiesgo) filtros.nivelRiesgo = nivelRiesgo;
+
+    const resultado = await getReportesService().generarDashboardCumplimiento(filtros, formato);
+
+    // Retornar según el formato solicitado
+    if (formato === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="dashboard-cumplimiento-${periodo || 'actual'}.pdf"`);
+      return res.send(resultado);
+    } else if (formato === 'excel') {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="dashboard-cumplimiento-${periodo || 'actual'}.xlsx"`);
+      return res.send(resultado);
+    } else {
+      return sendSuccess(res, resultado, 'Dashboard de cumplimiento generado exitosamente');
+    }
+  });
+
+  /**
+   * GET /api/v1/reportes-ejecutivos/analisis-predictivo
+   * Generar Análisis Predictivo y Planificación
+   */
+  generarAnalisisPredictivo = asyncHandler(async (req, res) => {
+    this._validarPermisosAdmin(req.user);
+
+    const {
+      formato = 'pdf',
+      periodosHistoricos = 8,
+      incluirSimulacion = true,
+      escenarios = ['optimista', 'base', 'pesimista']
+    } = req.query;
+
+    this._validarFormato(formato);
+
+    // Generar el análisis predictivo
+    const resultado = await getReportesService().generarAnalisisPredictivo({
+      periodosHistoricos: parseInt(periodosHistoricos),
+      incluirSimulacion,
+      escenarios
+    }, formato);
+
+    // Retornar según el formato solicitado
+    if (formato === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="analisis-predictivo-${new Date().toISOString().split('T')[0]}.pdf"`);
+      return res.send(resultado);
+    } else if (formato === 'excel') {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="analisis-predictivo-${new Date().toISOString().split('T')[0]}.xlsx"`);
+      return res.send(resultado);
+    } else {
+      return sendSuccess(res, resultado, 'Análisis predictivo generado exitosamente');
+    }
+  });
+
+}
+
+module.exports = new ReportesEjecutivosController();
