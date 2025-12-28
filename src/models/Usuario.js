@@ -30,7 +30,9 @@ module.exports = (sequelize) => {
       type: DataTypes.ENUM(
         'estudiante',
         'supervisor',
-        'admin'
+        'admin', 
+        'aspirante',
+        'especialista'
       ),
       allowNull: false,
       validate: {
@@ -332,6 +334,20 @@ module.exports = (sequelize) => {
 
   Usuario.prototype.puedeAdministrar = function() {
     return this.esAdmin() && this.activo;
+  };
+
+  /** nuevos items */
+
+  Usuario.prototype.esAspirante = function() {
+    return this.role === 'aspirante';
+  };
+
+  Usuario.prototype.esEspecialista = function() {
+    return this.role === 'especialista';
+  };
+
+  Usuario.prototype.puedeAccederOrientacionVocacional = function() {
+    return ['estudiante','aspirante', 'especialista'].includes(this.role);
   };
 
   /**

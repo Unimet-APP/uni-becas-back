@@ -10,7 +10,8 @@ const {
   validateResetPassword,
   validateChangePassword,
   validateUpdateProfile,
-  validateEmailByRole
+  validateEmailByRole,
+  validateConvertirEstudiante
 } = require('../validators/authValidators');
 
 const router = express.Router();
@@ -433,5 +434,54 @@ router.post('/verify-token', authenticate, authController.verifyToken);
  *         description: Usuario no encontrado
  */
 router.patch('/approve/:id', authenticate, requireAdmin, authController.approveUser);
+
+   /**
+    * @swagger
+    * /api/v1/auth/convertir-estudiante:
+    *   post:
+    *     summary: Convertir aspirante a estudiante
+    *     tags: [Autenticación]
+    *     description: |
+    *       Permite a un aspirante (estudiante de bachillerato) convertirse en estudiante universitario
+    *       cuando ingresa a la UNIMET. Requiere proporcionar un email institucional de estudiante (@correo.unimet.edu.ve).
+    *     security:
+    *       - bearerAuth: []
+    *     requestBody:
+    *       required: true
+    *       content:
+    *         application/json:
+    *           schema:
+    *             type: object
+    *             required:
+    *               - emailUnimet
+    *             properties:
+    *               emailUnimet:
+    *                 type: string
+    *                 format: email
+    *                 description: Email institucional de estudiante (@correo.unimet.edu.ve)
+    *                 example: maria.garcia@correo.unimet.edu.ve
+    *               carrera:
+    *                 type: string
+    *                 example: Ingeniería de Sistemas
+    *               trimestre:
+    *                 type: integer
+    *                 minimum: 1
+    *                 maximum: 15
+    *                 example: 1
+    *     responses:
+    *       200:
+    *         description: Aspirante convertido a estudiante exitosamente
+    *       400:
+    *         description: Error de validación
+    *       403:
+    *         description: Solo los aspirantes pueden usar este endpoint
+    */
+   router.post(
+     '/convertir-estudiante',
+     authenticate,
+     validateConvertirEstudiante,
+     authController.convertirAspiranteAEstudiante
+   );
+
 
 module.exports = router;

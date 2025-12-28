@@ -153,7 +153,7 @@ class AuthService {
         role,
         activo: true,
         // Los estudiantes se verifican automáticamente, supervisores y admins requieren aprobación
-        emailVerified: role === 'estudiante' ? true : false,
+        emailVerified: (role === 'estudiante' || role === 'aspirante') ? true : false,
         // Campos opcionales role-específicos
         ...(departamento && { departamento }),
         ...(cargo && { cargo }),
@@ -186,15 +186,21 @@ class AuthService {
 
       await transaction.commit();
 
-      // Enviar email de bienvenida si es estudiante (verificación automática)
-      if (role === 'estudiante') {
+      // Enviar email de bienvenida si es estudiante o aspirante (verificación automática)
+      if (role === 'estudiante' || role === 'aspirante') {
         try {
-          await emailService.sendStudentWelcomeEmail(email.toLowerCase(), nombre);
+          if (role === 'estudiante') {
+            await emailService.sendStudentWelcomeEmail(email.toLowerCase(), nombre);
+          } else if (role === 'aspirante') {
+            // Si tienes un método específico para aspirantes, úsalo aquí
+            // Si no, usa el mismo método de estudiantes
+            await emailService.sendStudentWelcomeEmail(email.toLowerCase(), nombre);
+          }
         } catch (emailError) {
           // Log del error pero no fallar el registro si el email falla
           console.error('Error al enviar email de bienvenida:', emailError);
         }
-      }
+      } 
 
       // Remover password del objeto usuario para la respuesta
       const { password: _, ...usuarioSinPassword } = nuevoUsuario.toJSON();
@@ -426,6 +432,71 @@ class AuthService {
       activo: usuario.activo
     };
   }
+  async convertirAspiranteAEstudiante(aspiranteId, emailUnimet, carrera, trimestre) {
+     const transaction = await sequelize.transaction();
+
+     try {
+       // Buscar el aspirante
+       const aspirante = await Usuario.findByPk(aspiranteId, { transaction });
+
+       if (!aspirante) {
+         throw ApiError.notFound('Aspirante no encontrado');
+       }
+
+       if (aspirante.role !== 'aspirante') {
+         throw ApiError.badRequest('Este usuario no es un aspirante');
+       }
+
+       // Validar que el email sea de estudiante UNIMET (@correo.unimet.edu.ve)
+       const { REGEX_VENEZOLANOS } = require('../config/constants');
+       if (!REGEX_VENEZOLANOS.EMAIL_ESTUDIANTE_UNIMET.test(emailUnimet)) {
+         throw ApiError.badRequest('Debe proporcionar un email institucional de estudiante (@correo.unimet.edu.ve)');
+       }
+
+       // Verificar que el email UNIMET no esté en uso
+       const emailExistente = await Usuario.findOne({
+         where: {
+           email: emailUnimet.toLowerCase(),
+           id: { [Op.ne]: aspiranteId }
+         },
+         transaction
+       });
+
+       if (emailExistente) {
+         throw ApiError.conflict('Este email UNIMET ya está registrado');
+       }
+
+       // Actualizar el usuario
+       await aspirante.update({
+         role: 'estudiante',
+         email: emailUnimet.toLowerCase(),
+         carrera: carrera || aspirante.carrera,
+         trimestre: trimestre || aspirante.trimestre,
+         emailVerified: true
+       }, { transaction });
+
+       await transaction.commit();
+
+       // Enviar email de bienvenida como estudiante
+       try {
+         await emailService.sendStudentWelcomeEmail(
+           emailUnimet.toLowerCase(),
+           aspirante.nombre
+         );
+       } catch (emailError) {
+         console.error('Error al enviar email de bienvenida:', emailError);
+       }
+
+       // Remover password del objeto usuario para la respuesta
+       const { password: _, ...usuarioSinPassword } = aspirante.toJSON();
+
+       return usuarioSinPassword;
+     } catch (error) {
+       await transaction.rollback();
+       throw error;
+     }
+   }
+
 }
 
 module.exports = new AuthService();

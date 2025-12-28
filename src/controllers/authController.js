@@ -125,6 +125,31 @@ class AuthController {
     return sendSuccess(res, usuarioAprobado, 'Usuario aprobado exitosamente. Se ha enviado un correo de notificación.');
   });
 
+   // POST /api/v1/auth/convertir-estudiante
+   convertirAspiranteAEstudiante = asyncHandler(async (req, res) => {
+     const userId = req.user.id;
+     const { emailUnimet, carrera, trimestre } = req.body;
+
+     // Verificar que el usuario sea un aspirante
+     if (req.user.role !== 'aspirante') {
+       throw ApiError.forbidden('Solo los aspirantes pueden convertirse en estudiantes');
+     }
+
+     const estudiante = await authService.convertirAspiranteAEstudiante(
+       userId,
+       emailUnimet,
+       carrera,
+       trimestre
+     );
+
+     return sendSuccess(
+       res,
+       estudiante,
+       'Tu cuenta ha sido actualizada a estudiante. Bienvenido a la Universidad Metropolitana!',
+       200
+     );
+   });
+
   // Helper para obtener permisos del usuario basado en su rol
   getUserPermissions(role) {
     const permissions = {
@@ -182,6 +207,25 @@ class AuthController {
         'read:all:horas',
         'approve:all:horas',
         'read:all:reportes'
+      ],
+      aspirante: [
+        'read:own:perfil',
+        'update:own:perfil',
+        'create:own:test',
+        'read:own:test',
+        'read:own:recomendaciones',
+        'read:own:notificaciones'
+      ],
+      especialista: [
+        'read:assigned:estudiantes',
+        'read:assigned:perfiles',
+        'read:assigned:tests',
+        'update:assigned:recomendaciones',
+        'read:own:profile',
+        'update:own:profile',
+        'create:seguimientos',
+        'read:assigned:seguimientos',
+        'review:recomendaciones:ia'
       ]
     };
 

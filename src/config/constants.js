@@ -2,7 +2,9 @@
 const ROLES = {
   ESTUDIANTE: 'estudiante',
   SUPERVISOR: 'supervisor',
-  ADMIN: 'admin'
+  ADMIN: 'admin', 
+  ASPIRANTE: 'aspirante',
+  ESPECIALISTA: 'especialista'
 };
 
 // Estados de postulación
@@ -165,7 +167,9 @@ const REGEX_VENEZOLANOS = {
   CEDULA: /^[VE]-\d{7,8}$/,
   // TELEFONO: Validación simplificada - solo longitud 7-20 caracteres (sin formato específico)
   // EMAIL_UNIMET: Permite subdominios (ej: estudiantes.unimet.edu.ve, correo.unimet.edu.ve)
-  EMAIL_UNIMET: /^[a-zA-Z0-9._%+-]+@([a-zA-Z0-9-]+\.)*unimet\.edu\.ve$/
+  EMAIL_UNIMET: /^[a-zA-Z0-9._%+-]+@([a-zA-Z0-9-]+\.)*unimet\.edu\.ve$/,
+  // EMAIL especifico para personal/profesores : @unimet.edu.ve
+  EMAIL_PERSONAL_UNIMET: /^[a-zA-Z0-9._%+-]+@unimet\.edu\.ve$/
 };
 
 // Mensajes de error comunes

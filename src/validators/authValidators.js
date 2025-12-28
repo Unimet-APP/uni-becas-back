@@ -155,6 +155,38 @@ const validateChangePassword = Joi.object({
   nuevaPassword: passwordSchema
 });
 
+ // Validaciones para convertir aspirante a estudiante
+   const validateConvertirEstudiante = Joi.object({
+     emailUnimet: emailSchema
+       .custom((value, helpers) => {
+         if (!REGEX_VENEZOLANOS.EMAIL_ESTUDIANTE_UNIMET.test(value)) {
+           return helpers.error('string.pattern.base');
+         }
+         return value;
+       })
+       .messages({
+         'string.pattern.base': 'Debe proporcionar un email institucional de estudiante (@correo.unimet.edu.ve)'
+       }),
+     carrera: Joi.string()
+       .max(100)
+       .optional()
+       .messages({
+         'string.max': 'La carrera no puede tener más de 100 caracteres'
+       }),
+     trimestre: Joi.number()
+       .integer()
+       .min(1)
+       .max(15)
+       .optional()
+       .messages({
+         'number.base': 'El trimestre debe ser un número',
+         'number.integer': 'El trimestre debe ser un número entero',
+         'number.min': 'El trimestre debe ser al menos 1',
+         'number.max': 'El trimestre no puede ser mayor a 15'
+       })
+   });
+
+
 // Validaciones para actualización de perfil
 const validateUpdateProfile = Joi.object({
   nombre: nombreSchema.optional(),
@@ -213,6 +245,7 @@ const validateEmailByRole = (req, res, next) => {
 
   // Roles que requieren email institucional UNIMET
   const rolesConEmailUnimet = ['estudiante'];
+  const rolesConEmailPersonal = ['especialista']
 
   // Solo validar dominio si el rol lo requiere
   if (role && rolesConEmailUnimet.includes(role)) {
@@ -233,6 +266,24 @@ const validateEmailByRole = (req, res, next) => {
   }
   // Otros roles (admin) pueden usar cualquier dominio de email válido
 
+  // Validar email de personal (@unimet.edu.ve)
+     if (rolesConEmailPersonal.includes(role)) {
+       if (!REGEX_VENEZOLANOS.EMAIL_PERSONAL_UNIMET.test(email)) {
+         return res.status(400).json({
+           success: false,
+           message: `El rol ${role} requiere un email institucional de personal (@unimet.edu.ve)`,
+           timestamp: new Date().toISOString(),
+           details: {
+             validationErrors: [{
+               field: 'email',
+               message: 'Debe usar un email institucional de personal: @unimet.edu.ve',
+               value: email
+             }]
+           }
+         });
+       }
+     }
+
   next();
 };
 
@@ -245,6 +296,7 @@ module.exports = {
   validateResetPassword: validate(validateResetPassword),
   validateChangePassword: validate(validateChangePassword),
   validateUpdateProfile: validate(validateUpdateProfile),
+  validateConvertirEstudiante: validate(validateConvertirEstudiante),
 
   // Validaciones adicionales
   validateUnimetEmail,
@@ -258,6 +310,7 @@ module.exports = {
     forgotPassword: validateForgotPassword,
     resetPassword: validateResetPassword,
     changePassword: validateChangePassword,
-    updateProfile: validateUpdateProfile
+    updateProfile: validateUpdateProfile,
+    convertirEstudiante: validateConvertirEstudiante
   }
 };

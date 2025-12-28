@@ -231,6 +231,25 @@ const requireRole = (allowedRoles) => {
   return requireRoles(...rolesArray);
 };
 
+const requireEspecialista = requireRoles(ROLES.ESPECIALISTA);
+
+const requireEspecialistaOrAdmin = requireRoles(
+  ROLES.ESPECIALISTA,
+  ROLES.ADMIN
+);
+
+const requireEstudianteOrAspirante = requireRoles(
+  ROLES.ESTUDIANTE,
+  ROLES.ASPIRANTE
+);
+
+const requireAccesoOrientacionVocacional = requireRoles(
+  ROLES.ESPECIALISTA,
+  ROLES.ESTUDIANTE,
+  ROLES.ASPIRANTE,
+  ROLES.ADMIN
+);
+
 module.exports = {
   // Middleware básicos de roles
   requireRoles,
@@ -240,6 +259,10 @@ module.exports = {
   requireAdmin,
   requireSupervisorOrAdmin,
   requireEstudianteOrSupervisor,
+  requireEspecialista,
+  requireEspecialistaOrAdmin,
+  requireEstudianteOrAspirante,
+  requireAccesoOrientacionVocacional,
 
   // Middleware con lógica de negocio
   canCreatePostulacion,
