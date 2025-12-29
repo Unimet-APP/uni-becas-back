@@ -7,7 +7,7 @@ const usuariosData = [
   {
     nombre: 'Juan Carlos',
     apellido: 'Pérez García',
-    email: 'juan.perez@unimet.edu.ve',
+    email: 'juan.perez@correo.unimet.edu.ve',
     password: 'Unimet123!',
     cedula: 'V-12345678',
     telefono: '+58 416 1234567',
@@ -16,7 +16,7 @@ const usuariosData = [
   {
     nombre: 'María Alejandra',
     apellido: 'González Rodríguez',
-    email: 'maria.gonzalez@unimet.edu.ve',
+    email: 'maria.gonzalez@correo.unimet.edu.ve',
     password: 'Unimet123!',
     cedula: 'V-23456789',
     telefono: '+58 416 2345678',
@@ -25,7 +25,7 @@ const usuariosData = [
   {
     nombre: 'Carlos Eduardo',
     apellido: 'Martínez López',
-    email: 'carlos.martinez@unimet.edu.ve',
+    email: 'carlos.martinez@correo.unimet.edu.ve',
     password: 'Unimet123!',
     cedula: 'V-34567890',
     telefono: '+58 416 3456789',
@@ -79,7 +79,49 @@ const usuariosData = [
     cedula: 'V-22222222',
     telefono: '+58 426 2345678',
     role: 'admin'
-  }
+  },
+  //Especialistas
+  {
+    nombre: 'Dra. Laura Beatriz',
+    apellido: 'Vargas Méndez',
+    email: 'laura.vargas@unimet.edu.ve',
+    password: 'Unimet123!',
+    cedula: 'V-78901234',
+    telefono: '+58 424 7890123',
+    role: 'especialista',
+    especialidad: 'Orientación Vocacional',
+    numColegiado: 'OV-001'
+  },
+  {
+    nombre: 'Psic. Roberto Carlos',
+    apellido: 'Jiménez Pérez',
+    email: 'roberto.jimenez@unimet.edu.ve',
+    password: 'Unimet123!',
+    cedula: 'V-89012345',
+    telefono: '+58 424 8901234',
+    role: 'especialista',
+    especialidad: 'Psicología Educativa',
+    numColegiado: 'OV-002'
+  },
+  // Aspirantes
+  {
+    nombre: 'Pedro José',
+    apellido: 'Ramírez Torres',
+    email: 'pedro.ramirez@gmail.com',
+    password: 'Unimet123!',
+    cedula: 'V-45678901',
+    telefono: '+58 416 4567890',
+    role: 'aspirante'
+  },
+  {
+    nombre: 'Ana Sofía',
+    apellido: 'Morales Sánchez',
+    email: 'ana.morales@hotmail.com',
+    password: 'Unimet123!',
+    cedula: 'V-56789012',
+    telefono: '+58 416 5678901',
+    role: 'aspirante'
+  },
 ];
 
 module.exports = async () => {
