@@ -7,7 +7,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Configuración del modelo
 const modelConfig = {
-  modelName: process.env.GEMINI_MODEL || 'gemini-pro', // o 'gemini-1.5-pro'
+  model: process.env.GEMINI_MODEL || 'gemini-1.5-flash', // Cambia modelName por model
   generationConfig: {
     temperature: 0.7,
     topK: 40,

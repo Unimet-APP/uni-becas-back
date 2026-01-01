@@ -1,6 +1,5 @@
 const { genAI, modelConfig } = require('../config/gemini');
 const ApiError = require('../utils/ApiError');
-
 class LLMService {
   constructor() {
     this.model = genAI.getGenerativeModel(modelConfig);
