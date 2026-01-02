@@ -1,11 +1,14 @@
-const { genAI, GEMINIMODEL, generationConfig, safetySettings } = require('../config/gemini');
+// ✅ Importar modelName, generationConfig, safetySettings
+const { genAI, modelName, generationConfig, safetySettings } = require('../config/gemini');
 const ApiError = require('../utils/ApiError');
 
 class LLMService {
   constructor() {
-    this.model = genAI.getGenerativeModel(GEMINIMODEL,{ 
-      generationConfig, 
-      safetySettings 
+    // ✅ CORREGIDO: Pasar objeto con { model: modelName } y configuraciones
+    this.model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig,
+      safetySettings
     });
   }
 
@@ -27,7 +30,7 @@ class LLMService {
       return text;
     } catch (error) {
       console.error('Error en LLM Service:', error);
-      throw new ApiError(500, `Error al generar respuesta del LLM: ${error.message}`);
+      throw new ApiError(500, `Error al generar respuesta del LLM: ${error.message || 'Error desconocido'}`);
     }
   }
 
@@ -126,8 +129,8 @@ Genera recomendaciones en formato JSON con:
   async chat(mensajes, contexto = {}) {
     try {
       // Validar que hay mensajes
-      if (!mensajes || mensajes.length === 0) {
-        throw new Error('Se requiere al menos un mensaje');
+      if (!mensajes || !Array.isArray(mensajes) || mensajes.length === 0) {
+        throw new Error('Se requiere un array de mensajes con al menos un mensaje');
       }
 
       // Separar el último mensaje (se envía por separado)
@@ -135,9 +138,8 @@ Genera recomendaciones en formato JSON con:
       const mensajesAnteriores = mensajes.slice(0, -1);
 
       // Construir historial solo con los mensajes anteriores
-      // ✅ CORREGIDO: Convertir 'assistant' a 'model' y excluir el último mensaje
+      // ✅ CORREGIDO: Convertir 'assistant' a 'model' (formato que espera Gemini)
       const historial = mensajesAnteriores.map(msg => {
-        // Convertir 'assistant' a 'model' (formato que espera Gemini)
         const role = msg.role === 'assistant' ? 'model' : (msg.role || 'user');
         
         return {
@@ -146,12 +148,10 @@ Genera recomendaciones en formato JSON con:
         };
       });
 
-      // Si hay historial, usar startChat con historial
-      // Si no hay historial, usar el modelo directamente
       let result;
       
       if (historial.length > 0) {
-        // ✅ CORREGIDO: Pasar generationConfig y safetySettings correctamente
+        // Si hay historial, usar startChat con historial
         const chat = this.model.startChat({
           history: historial,
           generationConfig: generationConfig,

@@ -10,8 +10,8 @@ if (!process.env.GEMINI_API_KEY) {
 // Inicializar Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// ✅ CORREGIDO: Nombre del modelo como string (cambiar el default a gemini-pro)
-const GEMINIMODEL = process.env.GEMINI_MODEL || 'gemini-pro';
+// ✅ Nombre del modelo como string
+const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-pro-002';
 
 // Configuración de generación
 const generationConfig = {
@@ -43,7 +43,7 @@ const safetySettings = [
 
 module.exports = {
   genAI,
-  GEMINIMODEL,  // ✅ String con el nombre del modelo
+  modelName,
   generationConfig,
   safetySettings,
 };
