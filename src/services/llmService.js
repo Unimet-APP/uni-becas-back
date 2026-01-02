@@ -1,8 +1,14 @@
-const { genAI, modelConfig } = require('../config/gemini');
+const { genAI, modelName, generationConfig, safetySettings } = require('../config/gemini');
 const ApiError = require('../utils/ApiError');
+
 class LLMService {
   constructor() {
-    this.model = genAI.getGenerativeModel(modelConfig);
+    const validModel = (modelName === 'gemini-pro') ? 'gemini-1.5-flash' : modelName;
+    this.model = genAI.getGenerativeModel({ 
+      model: modelName, 
+      generationConfig, 
+      safetySettings 
+    });
   }
 
   /**
@@ -23,7 +29,7 @@ class LLMService {
       return text;
     } catch (error) {
       console.error('Error en LLM Service:', error);
-      throw new ApiError(500, 'Error al generar respuesta del LLM');
+      throw new ApiError(500, `Error al generar respuesta del LLM: ${error.message}`);
     }
   }
 
@@ -117,28 +123,64 @@ Genera recomendaciones en formato JSON con:
 
   /**
    * Chat con historial de conversación
+   * ✅ CORREGIDO: Historial excluye el último mensaje y convierte 'assistant' a 'model'
    */
   async chat(mensajes, contexto = {}) {
     try {
-      // Construir historial de conversación
-      const historial = mensajes.map(msg => ({
-        role: msg.role || 'user',
-        parts: [{ text: msg.content }]
-      }));
+      // Validar que hay mensajes
+      if (!mensajes || mensajes.length === 0) {
+        throw new Error('Se requiere al menos un mensaje');
+      }
 
-      const chat = this.model.startChat({
-        history: historial,
-        generationConfig: modelConfig.generationConfig,
+      // Separar el último mensaje (se envía por separado)
+      const ultimoMensaje = mensajes[mensajes.length - 1];
+      const mensajesAnteriores = mensajes.slice(0, -1);
+
+      // Construir historial solo con los mensajes anteriores
+      // ✅ CORREGIDO: Convertir 'assistant' a 'model' y excluir el último mensaje
+      const historial = mensajesAnteriores.map(msg => {
+        // Convertir 'assistant' a 'model' (formato que espera Gemini)
+        const role = msg.role === 'assistant' ? 'model' : (msg.role || 'user');
+        
+        return {
+          role: role,
+          parts: [{ text: msg.content }]
+        };
       });
 
-      const ultimoMensaje = mensajes[mensajes.length - 1];
-      const result = await chat.sendMessage(ultimoMensaje.content);
-      const response = await result.response;
+      // Si hay historial, usar startChat con historial
+      // Si no hay historial, usar el modelo directamente
+      let result;
       
-      return response.text();
+      if (historial.length > 0) {
+        // ✅ CORREGIDO: Pasar generationConfig y safetySettings correctamente
+        const chat = this.model.startChat({
+          history: historial,
+          generationConfig: generationConfig,
+          safetySettings: safetySettings
+        });
+        
+        // ✅ CORREGIDO: Enviar solo el último mensaje
+        result = await chat.sendMessage(ultimoMensaje.content);
+      } else {
+        // Si no hay historial, usar generateContent directamente
+        result = await this.model.generateContent(ultimoMensaje.content);
+      }
+
+      const response = await result.response;
+      const text = response.text();
+      
+      return text;
     } catch (error) {
       console.error('Error en chat:', error);
-      throw new ApiError(500, 'Error en chat con LLM');
+      // Mostrar más detalles del error para debugging
+      if (error.message) {
+        console.error('Mensaje de error:', error.message);
+      }
+      if (error.stack) {
+        console.error('Stack trace:', error.stack);
+      }
+      throw new ApiError(500, `Error en chat con LLM: ${error.message || 'Error desconocido'}`);
     }
   }
 }

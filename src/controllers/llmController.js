@@ -1,6 +1,7 @@
 const asyncHandler = require('../utils/asyncHandler');
 const llmService = require('../services/llmService');
-const ApiResponse = require('../utils/apiResponse');
+// ✅ CORREGIDO: Import con mayúscula (aunque en Windows funciona con minúscula, es mejor ser consistente)
+const ApiResponse = require('../utils/ApiResponse');
 
 class LLMController {
   /**
@@ -40,6 +41,14 @@ class LLMController {
   chat = asyncHandler(async (req, res) => {
     const { mensajes, contexto } = req.body;
     
+    // Validación adicional
+    if (!mensajes || !Array.isArray(mensajes) || mensajes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requiere un array de mensajes con al menos un mensaje'
+      });
+    }
+
     const respuesta = await llmService.chat(mensajes, contexto);
     
     res.json(new ApiResponse(200, {
