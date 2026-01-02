@@ -1,11 +1,9 @@
-const { genAI, modelName, generationConfig, safetySettings } = require('../config/gemini');
+const { genAI, GEMINIMODEL, generationConfig, safetySettings } = require('../config/gemini');
 const ApiError = require('../utils/ApiError');
 
 class LLMService {
   constructor() {
-    const validModel = (modelName === 'gemini-pro') ? 'gemini-1.5-flash' : modelName;
-    this.model = genAI.getGenerativeModel({ 
-      model: modelName, 
+    this.model = genAI.getGenerativeModel(GEMINIMODEL,{ 
       generationConfig, 
       safetySettings 
     });

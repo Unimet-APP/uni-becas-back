@@ -10,10 +10,10 @@ if (!process.env.GEMINI_API_KEY) {
 // Inicializar Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Nombre del modelo
-const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+// ✅ CORREGIDO: Nombre del modelo como string (cambiar el default a gemini-pro)
+const GEMINIMODEL = process.env.GEMINI_MODEL || 'gemini-pro';
 
-// Configuración de generación (se pasa a startChat o getGenerativeModel)
+// Configuración de generación
 const generationConfig = {
   temperature: 0.7,
   topK: 40,
@@ -43,7 +43,7 @@ const safetySettings = [
 
 module.exports = {
   genAI,
-  modelName,  // ✅ Nombre del modelo como string
-  generationConfig,  // ✅ Configuración de generación separada
-  safetySettings,  // ✅ Configuración de seguridad separada
+  GEMINIMODEL,  // ✅ String con el nombre del modelo
+  generationConfig,
+  safetySettings,
 };
