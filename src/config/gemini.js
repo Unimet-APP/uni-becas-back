@@ -11,7 +11,7 @@ if (!process.env.GEMINI_API_KEY) {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // ✅ Nombre del modelo como string
-const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-pro-002';
+const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 // Configuración de generación
 const generationConfig = {
