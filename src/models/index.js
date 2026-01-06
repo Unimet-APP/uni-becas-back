@@ -35,6 +35,7 @@ db.DisponibilidadHoraria = require('./DisponibilidadHoraria')(sequelize, DataTyp
 db.ConfiguracionPeriodo = require('./ConfiguracionPeriodo')(sequelize, DataTypes);
 db.ConfiguracionBeca = require('./ConfiguracionBeca')(sequelize, DataTypes);
 db.Auditoria = require('./Auditoria')(sequelize, DataTypes);
+db.Career = require('./Career')(sequelize, DataTypes);
 
 // Define associations
 Object.keys(db).forEach(modelName => {

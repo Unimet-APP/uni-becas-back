@@ -16,8 +16,12 @@ const reportesExportRoutes = require('./reportesExportRoutes');
 const configuracionRoutes = require('./configuracionRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const llmRoutes = require('./llmRoutes');
+const careersRoutes = require('./careersRoutes');
 
 const router = express.Router();
+
+// Public careers catalog (used by vocational explorer)
+router.use('/careers', careersRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
