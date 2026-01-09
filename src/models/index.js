@@ -37,6 +37,13 @@ db.ConfiguracionBeca = require('./ConfiguracionBeca')(sequelize, DataTypes);
 db.Auditoria = require('./Auditoria')(sequelize, DataTypes);
 db.Career = require('./Career')(sequelize, DataTypes);
 
+
+db.PreguntaOrientacion = require('./PreguntaOrientacion')(sequelize, DataTypes);
+db.SesionTestOrientacion = require('./SesionTestOrientacion')(sequelize, DataTypes);
+db.TrayectoriaAcademica = require('./TrayectoriaAcademica')(sequelize, DataTypes);
+db.RespuestaTestOrientacion = require('./RespuestaTestOrientacion')(sequelize, DataTypes);
+db.ResultadoOrientacion = require('./ResultadoOrientacion')(sequelize, DataTypes);
+
 // Define associations
 Object.keys(db).forEach(modelName => {
   if (db[modelName].associate) {
