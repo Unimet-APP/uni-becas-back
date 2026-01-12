@@ -1337,6 +1337,10 @@ const swaggerDefinition = {
     {
       name: 'Auditoría',
       description: 'Logs del sistema y consultas de auditoría'
+    },
+    {
+      name: 'Orientación Vocacional',
+      description: 'Sistema inteligente de orientación vocacional con LLM y tests psicométricos'
     }
   ]
 };
