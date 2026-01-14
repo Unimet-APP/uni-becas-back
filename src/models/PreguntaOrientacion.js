@@ -13,7 +13,6 @@ module.exports = (sequelize) => {
       codigo: {
         type: DataTypes.STRING(50),
         allowNull: false,
-        unique: true,
         comment: 'Código único de la pregunta (ej: KUDER-001, HOLLAND-R-001)',
         validate: {
           notEmpty: true,
@@ -143,6 +142,13 @@ module.exports = (sequelize) => {
       createdAt: 'created_at',
       updatedAt: 'updated_at',
       underscored: true,
+      indexes: [
+        {
+          unique: true,
+          fields: ['codigo'],
+          name: 'preguntas_orientacion_codigo_unique',
+        },
+      ],
     }
   );
 

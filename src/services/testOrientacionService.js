@@ -25,10 +25,6 @@ class TestOrientacionService {
         throw new ApiError(404, 'Usuario no encontrado');
       }
 
-      if (usuario.role !== 'estudiante') {
-        throw new ApiError(400, 'Solo los estudiantes pueden realizar tests de orientación');
-      }
-
       // 2. Validar tipo de test
       if (!['Kuder', 'Holland_RIASEC'].includes(tipoTest)) {
         throw new ApiError(400, 'Tipo de test no válido');
@@ -60,20 +56,40 @@ class TestOrientacionService {
         seed
       );
 
+      console.log(`[TestOrientacionService] Preguntas obtenidas: ${preguntas.length}`);
+      if (preguntas.length > 0) {
+        console.log(`[TestOrientacionService] Primera pregunta:`, {
+          id: preguntas[0].id,
+          texto: preguntas[0].texto_pregunta?.substring(0, 50),
+          tipo: preguntas[0].tipo_pregunta,
+        });
+      }
+
       // 7. Guardar IDs de preguntas en sesión
       await sesion.update({
         preguntas_ronda_1: preguntas.map((p) => p.id),
       });
 
+      // 8. Mapear preguntas con todos los campos necesarios
+      const preguntasMapeadas = preguntas.map((p) => ({
+        id: p.id,
+        codigo: p.codigo,
+        texto: p.texto_pregunta,
+        textoPregunta: p.texto_pregunta, // Alias
+        tipo: p.tipo_pregunta,
+        tipoPregunta: p.tipo_pregunta, // Alias
+        opciones: p.opciones_respuesta,
+        opcionesRespuesta: p.opciones_respuesta, // Alias
+        instrucciones: p.instrucciones,
+        dimensionPrincipal: p.dimension_principal,
+        peso: p.peso,
+      }));
+
+      console.log(`[TestOrientacionService] Preguntas mapeadas: ${preguntasMapeadas.length}`);
+
       return {
         sesion,
-        preguntas: preguntas.map((p) => ({
-          id: p.id,
-          texto: p.texto_pregunta,
-          tipo: p.tipo_pregunta,
-          opciones: p.opciones_respuesta,
-          instrucciones: p.instrucciones,
-        })),
+        preguntas: preguntasMapeadas,
       };
     } catch (error) {
       console.error('Error en crearSesion:', error);

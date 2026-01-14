@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const orientacionController = require('../controllers/orientacionVocacionalController');
 const authenticate = require('../middleware/auth').authenticate;
-const rbac = require('../middleware/rbac');
 const {
   validateIniciarTest,
   validateGuardarRespuestasRonda1,
@@ -69,7 +68,6 @@ const {
 router.post(
   '/iniciar-test',
   authenticate,
-  rbac(['estudiante']),
   validateIniciarTest,
   orientacionController.iniciarTest
 );
@@ -139,7 +137,6 @@ router.post(
 router.post(
   '/guardar-respuestas-ronda-1',
   authenticate,
-  rbac(['estudiante']),
   validateGuardarRespuestasRonda1,
   orientacionController.guardarRespuestasRonda1
 );
@@ -207,7 +204,6 @@ router.post(
 router.post(
   '/guardar-respuestas-ronda-2',
   authenticate,
-  rbac(['estudiante']),
   validateGuardarRespuestasRonda2,
   orientacionController.guardarRespuestasRonda2
 );
@@ -245,7 +241,6 @@ router.post(
 router.get(
   '/sesion/:sesionId',
   authenticate,
-  rbac(['estudiante']),
   validateSesionIdParam,
   orientacionController.obtenerSesion
 );
@@ -283,7 +278,6 @@ router.get(
 router.get(
   '/resultados/:sesionId',
   authenticate,
-  rbac(['estudiante']),
   validateSesionIdParam,
   orientacionController.obtenerResultados
 );
@@ -319,7 +313,6 @@ router.get(
 router.get(
   '/mi-perfil-vocacional',
   authenticate,
-  rbac(['estudiante']),
   orientacionController.obtenerPerfilVocacional
 );
 
@@ -347,7 +340,6 @@ router.get(
 router.get(
   '/historial',
   authenticate,
-  rbac(['estudiante']),
   orientacionController.obtenerHistorial
 );
 
@@ -389,7 +381,6 @@ router.get(
 router.post(
   '/recomendaciones-continuas',
   authenticate,
-  rbac(['estudiante']),
   orientacionController.generarRecomendacionesContinuas
 );
 
@@ -440,7 +431,6 @@ router.post(
 router.post(
   '/analizar-cambio-carrera',
   authenticate,
-  rbac(['estudiante']),
   validateAnalizarCambioCarrera,
   orientacionController.analizarCambioCarrera
 );

@@ -19,8 +19,9 @@ class OrientacionVocacionalController {
         sesionId: resultado.sesion.id,
         tipoTest: resultado.sesion.tipo_test,
         estado: resultado.sesion.estado,
-        preguntas: resultado.preguntas,
+        preguntas: resultado.preguntas || [],
         fechaInicio: resultado.sesion.fecha_inicio,
+        totalPreguntas: resultado.preguntas?.length || 0,
       }, 'Test iniciado correctamente')
     );
   });

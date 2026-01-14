@@ -21,7 +21,6 @@ module.exports = {
         codigo: {
           type: Sequelize.STRING(50),
           allowNull: false,
-          unique: true,
           comment: "Código único de la pregunta (ej: KUDER-001, HOLLAND-R-001)",
         },
         tipo_test: {

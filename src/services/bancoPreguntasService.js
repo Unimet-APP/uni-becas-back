@@ -13,6 +13,8 @@ class BancoPreguntasService {
    */
   async obtenerPreguntasRonda1(tipoTest, usuarioId, seed) {
     try {
+      console.log(`[BancoPreguntasService] Obteniendo preguntas para test: ${tipoTest}`);
+      
       // 1. Obtener todas las preguntas activas del tipo de test
       const todasPreguntas = await PreguntaOrientacion.findAll({
         where: {
@@ -21,6 +23,8 @@ class BancoPreguntasService {
         },
         order: [['efectividad_historica', 'DESC']],
       });
+
+      console.log(`[BancoPreguntasService] Total preguntas encontradas: ${todasPreguntas.length}`);
 
       if (todasPreguntas.length === 0) {
         throw new ApiError(404, `No hay preguntas disponibles para el test ${tipoTest}`);
