@@ -3,8 +3,8 @@ const swaggerJSDoc = require('swagger-jsdoc');
 const swaggerDefinition = {
   openapi: '3.0.0',
   info: {
-    title: 'Student Services System - Universidad Metropolitana',
-    version: '2.0.0',
+    title: 'Scholarship Management System - Universidad Metropolitana',
+    version: '1.0.0',
     description: `
       Comprehensive API for managing Universidad Metropolitana's four scholarship programs.
 
@@ -1337,10 +1337,6 @@ const swaggerDefinition = {
     {
       name: 'Auditoría',
       description: 'Logs del sistema y consultas de auditoría'
-    },
-    {
-      name: 'Orientación Vocacional',
-      description: 'Sistema inteligente de orientación vocacional con LLM y tests psicométricos'
     }
   ]
 };

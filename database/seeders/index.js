@@ -4,7 +4,6 @@ const seedProgramasBecas = require('./002-programas-becas');
 const seedUsuarios = require('./003-usuarios');
 const seedPostulaciones = require('./004-postulaciones-ejemplo');
 const seedConfiguracionesBecas = require('./005-configuraciones-becas');
-const seedPreguntasHolland = require('./006-preguntas-holland-riasec');
 
 const runSeeders = async () => {
   try {
@@ -26,9 +25,6 @@ const runSeeders = async () => {
 
     // Seeder de configuraciones de becas
     await seedConfiguracionesBecas();
-
-    // Seeder de preguntas de orientación vocacional
-    await seedPreguntasHolland();
 
     console.log('🎉 Seeders completados exitosamente');
   } catch (error) {

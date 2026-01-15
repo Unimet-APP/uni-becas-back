@@ -32,37 +32,15 @@ const startServer = async () => {
           logger.info('ℹ️  Using existing database schema');
         } else {
           logger.info('🔄 Starting database sync (alter mode)...');
-          // Excluir modelos de orientación vocacional del sync automático
-          // Estos modelos deben ser gestionados solo mediante migraciones
-          const orientacionModels = [
-            'PreguntaOrientacion', 
-            'SesionTestOrientacion', 
-            'RespuestaTestOrientacion', 
-            'ResultadoOrientacion', 
-            'TrayectoriaAcademica'
-          ];
-          
-          let syncedCount = 0;
-          let skippedCount = 0;
-          
+          // Sincronizar todos los modelos
           for (const modelName in sequelize.models) {
-            if (orientacionModels.includes(modelName)) {
-              skippedCount++;
-              logger.debug(`⏭️  Skipping sync for ${modelName} (managed by migrations)`);
-            } else {
-              try {
-                await sequelize.models[modelName].sync({ alter: true });
-                syncedCount++;
-              } catch (modelSyncError) {
-                logger.warn(`⚠️  Failed to sync ${modelName}: ${modelSyncError.message}`);
-              }
+            try {
+              await sequelize.models[modelName].sync({ alter: true });
+            } catch (modelSyncError) {
+              logger.warn(`⚠️  Failed to sync ${modelName}: ${modelSyncError.message}`);
             }
           }
-          
-          logger.info(`✅ Database synchronized: ${syncedCount} models synced, ${skippedCount} skipped (migration-managed)`);
-          if (skippedCount > 0) {
-            logger.info('ℹ️  Modelos de orientación vocacional deben gestionarse mediante migraciones (npm run migrate)');
-          }
+          logger.info('✅ Database synchronized successfully');
         }
 
         // Run seeders to populate database with test data (only creates if not exists)
