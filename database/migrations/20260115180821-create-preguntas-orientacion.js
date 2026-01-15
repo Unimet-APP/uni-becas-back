@@ -110,7 +110,7 @@ module.exports = {
         defaultValue: Sequelize.literal('NOW()'),
       },
     });
-    await queryInterface.addIndex('preguntas_orientacion', ['tipo_test'],['dimension_principal'], {
+    await queryInterface.addIndex('preguntas_orientacion', ['tipo_test','dimension_principal'], {
       unique: true,
       name: 'idx_preguntas_tipo_dimension',
     });

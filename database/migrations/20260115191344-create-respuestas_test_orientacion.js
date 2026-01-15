@@ -11,7 +11,7 @@ module.exports = {
      */
     let tableExists = true;
     try {
-      await queryInterface.describeTable('resultados_test_orientacion');
+      await queryInterface.describeTable('respuestas_test_orientacion');
     } catch (error) {
       tableExists = false;
     }
