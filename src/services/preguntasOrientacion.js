@@ -58,7 +58,7 @@ class PreguntasOrientacionService {
                     // Preguntas de confirmación para áreas de alto interés
                     const confirmacion = await PreguntasOrientacion.findAll({
                         where: {
-                            tipo_test: sesion.tipoTest,
+                            tipo_test: sesion.tipo_test,
                             dimension_principal: dimension,
                             peso_pregunta: 'alta',
                             activa: true
@@ -71,7 +71,7 @@ class PreguntasOrientacionService {
                     // Preguntas de validación para áreas de interés medio
                     const validacion = await PreguntasOrientacion.findAll({
                         where: {
-                            tipo_test: sesion.tipoTest,
+                            tipo_test: sesion.tipo_test,
                             dimension_principal: dimension,
                             peso_pregunta: 'media',
                             activa: true
@@ -84,7 +84,7 @@ class PreguntasOrientacionService {
                     // Preguntas polarizantes para áreas de bajo interés
                     const polarizantes = await PreguntasOrientacion.findAll({
                         where: {
-                            tipo_test: sesion.tipoTest,
+                            tipo_test: sesion.tipo_test,
                             dimension_principal: dimension,
                             peso_pregunta: 'alta',
                             activa: true
@@ -98,13 +98,13 @@ class PreguntasOrientacionService {
 
             // Agregar preguntas de validación cruzada si hay discrepancias
             if (discrepancias && discrepancias.length > 0){
-                const vCruzada = await this.seleccionarPreguntasValidacionCruzada(discrepancias, sesion.tipoTest);
+                const vCruzada = await this.seleccionarPreguntasValidacionCruzada(discrepancias, sesion.tipo_test);
                 seleccionadas.push(...vCruzada);
             }
 
             // Aplicar reglas anti-sesgo
             const dimensionesHolland = ['Realista', 'Investigador', 'Artístico', 'Social', 'Emprendedor', 'Convencional'];
-            return await this.aplicarReglasAntiSesgo(seleccionadas, dimensionesHolland, sesion.tipoTest);
+            return await this.aplicarReglasAntiSesgo(seleccionadas, dimensionesHolland, sesion.tipo_test);
                
         } catch(error){
             this._handleError('seleccionarPreguntasRonda2', error);
@@ -168,7 +168,7 @@ class PreguntasOrientacionService {
     async obtenerPreguntasUsadasPorUsuario(usuarioId) {
         const sesiones = await SesionesTestOrientacion.findAll({
             where: {
-                usuarioId: usuarioId,
+                usuario_id: usuarioId,
                 estado: {
                     [Op.in]: ['ronda_1_completada', 'ronda_2_completada', 'finalizada']
                 }

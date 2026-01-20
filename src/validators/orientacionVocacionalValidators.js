@@ -10,20 +10,61 @@ const iniciarTestSchema = Joi.object({
 });
 
 // Schema para guardar respuestas ronda 1
+// La respuesta puede ser:
+// - Booleano (true/false) para preguntas directas
+// - Número (índice de opción) para preguntas con opciones múltiples
+// - String (texto de la opción) para preguntas con opciones múltiples
+// - Objeto con información de la selección
 const respuestaSchema = Joi.object({
   preguntaId: Joi.string().uuid().required()
     .messages({
       'string.guid': 'El ID de la pregunta debe ser un UUID válido',
       'any.required': 'El ID de la pregunta es requerido'
     }),
-  respuesta: Joi.boolean().required()
+  respuesta: Joi.alternatives()
+    .try(
+      // Booleanos y sus variantes
+      Joi.boolean(),
+      Joi.string().valid('true', 'false', '1', '0', 'True', 'False'),
+      Joi.number().integer().valid(0, 1),
+      // Números (índices de opciones)
+      Joi.number().integer().min(0),
+      // Strings (texto de opciones)
+      Joi.string().min(1),
+      // Objetos con información de selección
+      Joi.object({
+        opcionSeleccionada: Joi.alternatives().try(Joi.string(), Joi.number()).optional(),
+        indice: Joi.number().integer().min(0).optional(),
+        valor: Joi.alternatives().try(Joi.boolean(), Joi.string(), Joi.number()).optional()
+      })
+    )
+    .required()
     .messages({
       'any.required': 'La respuesta es requerida'
     }),
-  respuestaCorrecta: Joi.boolean().optional(),
+  respuestaCorrecta: Joi.alternatives()
+    .try(
+      Joi.boolean(),
+      Joi.string().valid('true', 'false', '1', '0'),
+      Joi.number().integer().valid(0, 1)
+    )
+    .optional()
+    .custom((value) => {
+      if (value === undefined || value === null) return undefined;
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'string') {
+        if (value === 'true' || value === '1') return true;
+        if (value === 'false' || value === '0') return false;
+      }
+      if (typeof value === 'number') return value === 1;
+      return value;
+    }),
   dimensionPredicha: Joi.string().optional(),
   tiempoRespuesta: Joi.number().integer().min(0).optional(),
-  nivelSeguridad: Joi.string().valid('seguro', 'no_seguro').optional()
+  nivelSeguridad: Joi.string().valid('seguro', 'no_seguro').optional(),
+  // Campos adicionales para preguntas con opciones
+  opcionSeleccionada: Joi.alternatives().try(Joi.string(), Joi.number()).optional(),
+  indiceOpcion: Joi.number().integer().min(0).optional()
 });
 
 const guardarRespuestasRonda1Schema = Joi.object({
@@ -75,13 +116,26 @@ const analizarCambioCarreraSchema = Joi.object({
 // Middleware de validación
 const validate = (schema, source = 'body') => {
   return (req, res, next) => {
-    const { error } = schema.validate(source === 'body' ? req.body : req.params);
+    const { error, value } = schema.validate(
+      source === 'body' ? req.body : req.params,
+      { 
+        abortEarly: false,
+        convert: true, // Convertir valores automáticamente
+        stripUnknown: false // No eliminar campos desconocidos
+      }
+    );
     if (error) {
       return res.status(400).json({
         success: false,
         message: 'Error de validación',
         errors: error.details.map(d => d.message)
       });
+    }
+    // Reemplazar el objeto original con el valor validado y convertido
+    if (source === 'body') {
+      req.body = value;
+    } else {
+      req.params = value;
     }
     next();
   };

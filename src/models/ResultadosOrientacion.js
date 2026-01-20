@@ -1,19 +1,19 @@
 "use strict";
-const { Model } = require('DataTypes');
+const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
     class ResultadosOrientacion extends Model {
-    
         static associate(models) {
-            ResultadosOrientacion.belongsTo(models.SesionesTestOrientacion, { foreignKey: 'sesion_id' });
-            ResultadosOrientacion.belongsTo(models.Usuarios, { foreignKey: 'usuario_id' });
-        }}
+            ResultadosOrientacion.belongsTo(models.SesionesTestOrientacion, { foreignKey: 'sesion_id', as: 'sesion' });
+            ResultadosOrientacion.belongsTo(models.Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
+        }
+    }
 
-        ResultadosOrientacion.init({
+    ResultadosOrientacion.init({
             // 1. IDENTIFICACIÓN Y VÍNCULOS
             id: {
             type: DataTypes.UUID,
-            defaultValue: DataTypes.literal("gen_random_uuid()"),
+            defaultValue: sequelize.literal("gen_random_uuid()"),
             allowNull: false,
             primaryKey: true,
             },
@@ -85,17 +85,17 @@ module.exports = (sequelize, DataTypes) => {
             fecha_generacion: {
             type: DataTypes.DATE,
             allowNull: false,
-            defaultValue: DataTypes.literal("NOW()"),
+            defaultValue: sequelize.literal("NOW()"),
             },
             created_at: {
             type: DataTypes.DATE,
             allowNull: false,
-            defaultValue: DataTypes.literal("NOW()"),
+            defaultValue: sequelize.literal("NOW()"),
             },
             updated_at: {
             type: DataTypes.DATE,
             allowNull: false,
-            defaultValue: DataTypes.literal("NOW()"),
+            defaultValue: sequelize.literal("NOW()"),
             },
         },
         {
@@ -106,6 +106,6 @@ module.exports = (sequelize, DataTypes) => {
             underscored: true,
         }
     );
-      return ResultadosOrientacion;
 
+    return ResultadosOrientacion;
 };

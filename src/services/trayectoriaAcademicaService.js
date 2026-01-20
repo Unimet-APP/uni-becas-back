@@ -38,9 +38,7 @@ class TrayectoriaAcademicaService {
    */
   async crearDesdeUsuario(usuarioId) {
     try {
-      const usuario = await Usuario.findByPk(usuarioId, {
-        include: [{ model: Career, as: 'carrera' }],
-      });
+      const usuario = await Usuario.findByPk(usuarioId);
 
       if (!usuario) {
         throw new ApiError(404, 'Usuario no encontrado');
@@ -195,8 +193,8 @@ class TrayectoriaAcademicaService {
       return usuario.asignaturas_por_area;
     }
 
-    // Si no, crear estructura básica desde la carrera
-    const carrera = usuario.carrera || {};
+    // Si no, crear estructura básica desde la información del usuario
+    // Nota: usuario.carrera es un STRING, no una relación con Career
     return {
       'General': {
         promedio: usuario.iaa || 0,

@@ -19,8 +19,8 @@ class TestOrientacionService {
       const seed = `${Date.now()}-${Math.random()}`;
       
       const sesion = await SesionesTestOrientacion.create({
-        usuarioId,
-        tipoTest,
+        usuario_id: usuarioId,
+        tipo_test: tipoTest,
         estado: 'iniciada',
         seed_aleatorio: seed,
         fecha_inicio: new Date(),
@@ -33,6 +33,89 @@ class TestOrientacionService {
   }
 
   /**
+   * Normaliza diferentes formatos de respuesta a booleano
+   * Para preguntas con opciones múltiples, determina si la opción seleccionada
+   * corresponde a la dimensión principal de la pregunta
+   */
+  _normalizarRespuesta(respuesta, pregunta = null) {
+    const tieneOpciones = pregunta && 
+                          pregunta.instrucciones_respuesta && 
+                          Array.isArray(pregunta.instrucciones_respuesta) && 
+                          pregunta.instrucciones_respuesta.length > 0;
+
+    // Si ya es booleano, retornarlo
+    if (typeof respuesta === 'boolean') {
+      return respuesta;
+    }
+
+    // Si es string
+    if (typeof respuesta === 'string') {
+      const lower = respuesta.toLowerCase().trim();
+      // Valores booleanos explícitos
+      if (lower === 'true' || lower === '1' || lower === 'yes' || lower === 'sí' || lower === 'si') {
+        return true;
+      }
+      if (lower === 'false' || lower === '0' || lower === 'no') {
+        return false;
+      }
+      // Si es texto de una opción
+      if (tieneOpciones) {
+        // Verificar si el texto coincide con alguna opción
+        const opcionEncontrada = pregunta.instrucciones_respuesta.find(
+          op => op.toLowerCase().trim() === lower || op === respuesta
+        );
+        // Si coincide con una opción, retornar true
+        // (la dimensión se determinará en el cálculo de puntuaciones)
+        return opcionEncontrada !== undefined;
+      }
+      // Por defecto, si es un string no vacío, considerar como true
+      return respuesta.length > 0;
+    }
+
+    // Si es número
+    if (typeof respuesta === 'number') {
+      if (tieneOpciones) {
+        // Si es un índice de opción válido, retornar true
+        // (índice >= 0 y < número de opciones)
+        return respuesta >= 0 && respuesta < pregunta.instrucciones_respuesta.length;
+      }
+      // Para preguntas sin opciones: 0 = false, cualquier otro número = true
+      return respuesta !== 0;
+    }
+
+    // Si es objeto
+    if (typeof respuesta === 'object' && respuesta !== null) {
+      // Si tiene valor booleano
+      if (typeof respuesta.valor === 'boolean') {
+        return respuesta.valor;
+      }
+      // Si tiene índice de opción
+      if (typeof respuesta.indice === 'number') {
+        if (tieneOpciones) {
+          return respuesta.indice >= 0 && respuesta.indice < pregunta.instrucciones_respuesta.length;
+        }
+        return respuesta.indice >= 0;
+      }
+      // Si tiene opción seleccionada (texto o número)
+      if (respuesta.opcionSeleccionada !== undefined && respuesta.opcionSeleccionada !== null) {
+        if (tieneOpciones) {
+          if (typeof respuesta.opcionSeleccionada === 'number') {
+            return respuesta.opcionSeleccionada >= 0 && 
+                   respuesta.opcionSeleccionada < pregunta.instrucciones_respuesta.length;
+          }
+          if (typeof respuesta.opcionSeleccionada === 'string') {
+            return pregunta.instrucciones_respuesta.includes(respuesta.opcionSeleccionada);
+          }
+        }
+        return true; // Hay una opción seleccionada
+      }
+    }
+
+    // Por defecto, convertir a booleano
+    return Boolean(respuesta);
+  }
+
+  /**
    * Guarda las respuestas de la ronda 1
    */
   async guardarRespuestasRonda1(sesionId, respuestas, usuarioId) {
@@ -42,15 +125,27 @@ class TestOrientacionService {
         throw new ApiError(404, 'Sesión no encontrada');
       }
 
+      // Cargar preguntas para normalizar respuestas
+      const { PreguntasOrientacion } = require('../models');
+      const preguntaIds = respuestas.map(r => r.preguntaId);
+      const preguntas = await PreguntasOrientacion.findAll({
+        where: { id: preguntaIds }
+      });
+      const preguntasMap = {};
+      preguntas.forEach(p => { preguntasMap[p.id] = p; });
+
       // Guardar cada respuesta
       const respuestasGuardadas = [];
       for (const respuesta of respuestas) {
+        const pregunta = preguntasMap[respuesta.preguntaId];
+        const respuestaNormalizada = this._normalizarRespuesta(respuesta.respuesta, pregunta);
+        
         const respuestaGuardada = await RespuestasTestOrientacion.create({
-          sesionId: sesionId,
+          sesion_id: sesionId,
           pregunta_id: respuesta.preguntaId,
-          usuarioId: usuarioId,
+          usuario_id: usuarioId,
           ronda: 1,
-          respuesta: respuesta.respuesta,
+          respuesta: respuestaNormalizada,
           respuesta_correcta: respuesta.respuestaCorrecta || false,
           dimension_predicha: respuesta.dimensionPredicha || '',
           tiempo_respuesta: respuesta.tiempoRespuesta || 0,
@@ -61,7 +156,7 @@ class TestOrientacionService {
       }
 
       // Calcular puntuaciones
-      const puntuaciones = this.calcularPuntuaciones(respuestasGuardadas, sesion.tipoTest);
+      const puntuaciones = await this.calcularPuntuaciones(respuestasGuardadas, sesion.tipo_test);
       const ambiguedades = this.detectarAmbiguedades(puntuaciones);
 
       // Actualizar sesión
@@ -94,15 +189,27 @@ class TestOrientacionService {
         throw new ApiError(404, 'Sesión no encontrada');
       }
 
+      // Cargar preguntas para normalizar respuestas
+      const { PreguntasOrientacion } = require('../models');
+      const preguntaIds = respuestas.map(r => r.preguntaId);
+      const preguntas = await PreguntasOrientacion.findAll({
+        where: { id: preguntaIds }
+      });
+      const preguntasMap = {};
+      preguntas.forEach(p => { preguntasMap[p.id] = p; });
+
       // Guardar cada respuesta
       const respuestasGuardadas = [];
       for (const respuesta of respuestas) {
+        const pregunta = preguntasMap[respuesta.preguntaId];
+        const respuestaNormalizada = this._normalizarRespuesta(respuesta.respuesta, pregunta);
+        
         const respuestaGuardada = await RespuestasTestOrientacion.create({
-          sesionId: sesionId,
+          sesion_id: sesionId,
           pregunta_id: respuesta.preguntaId,
-          usuarioId: usuarioId,
+          usuario_id: usuarioId,
           ronda: 2,
-          respuesta: respuesta.respuesta,
+          respuesta: respuestaNormalizada,
           respuesta_correcta: respuesta.respuestaCorrecta || false,
           dimension_predicha: respuesta.dimensionPredicha || '',
           tiempo_respuesta: respuesta.tiempoRespuesta || 0,
@@ -113,7 +220,7 @@ class TestOrientacionService {
       }
 
       // Calcular puntuaciones
-      const puntuacionesRonda2 = this.calcularPuntuaciones(respuestasGuardadas, sesion.tipoTest);
+      const puntuacionesRonda2 = await this.calcularPuntuaciones(respuestasGuardadas, sesion.tipo_test);
       const puntuacionesRonda1 = sesion.puntuaciones_ronda_1 || {};
 
       // Calcular puntuaciones finales
@@ -144,7 +251,7 @@ class TestOrientacionService {
   /**
    * Calcula las puntuaciones por dimensión basándose en las respuestas
    */
-  calcularPuntuaciones(respuestas, tipoTest) {
+  async calcularPuntuaciones(respuestas, tipoTest) {
     const puntuaciones = {};
     const dimensionesHolland = ['Realista', 'Investigador', 'Artístico', 'Social', 'Emprendedor', 'Convencional'];
 
@@ -153,28 +260,61 @@ class TestOrientacionService {
       puntuaciones[dim] = 0;
     });
 
+    // Obtener IDs de preguntas
+    const preguntaIds = respuestas.map(r => r.pregunta_id || r.preguntaId);
+    
+    // Cargar todas las preguntas de una vez
+    const { PreguntasOrientacion } = require('../models');
+    const preguntas = await PreguntasOrientacion.findAll({
+      where: {
+        id: preguntaIds,
+        tipo_test: tipoTest,
+      },
+    });
+
+    // Crear mapa de preguntas por ID
+    const preguntasMap = {};
+    preguntas.forEach(p => {
+      preguntasMap[p.id] = p;
+    });
+
     // Calcular puntuaciones basándose en las respuestas
     for (const respuesta of respuestas) {
-      const pregunta = respuesta.pregunta || {};
+      const preguntaId = respuesta.pregunta_id || respuesta.preguntaId;
+      const pregunta = preguntasMap[preguntaId];
+      
+      if (!pregunta) continue;
+      
       const dimensionPrincipal = pregunta.dimension_principal;
+      const tieneOpciones = pregunta.instrucciones_respuesta && 
+                            Array.isArray(pregunta.instrucciones_respuesta) && 
+                            pregunta.instrucciones_respuesta.length > 0;
       
       if (dimensionPrincipal && puntuaciones.hasOwnProperty(dimensionPrincipal)) {
         // Peso de la pregunta
         const peso = this._obtenerPesoNumerico(pregunta.peso_pregunta || 'media');
         
-        // Si la respuesta es positiva (true), suma puntos
+        // Si la respuesta es positiva (true), suma puntos a la dimensión principal
+        // Para preguntas con opciones, true significa que se seleccionó una opción
+        // que corresponde a la dimensión principal
         if (respuesta.respuesta === true) {
           puntuaciones[dimensionPrincipal] += peso;
-        }
-        
-        // También considerar dimensiones secundarias
-        const dimensionesSecundarias = pregunta.dimension_secundaria || [];
-        if (Array.isArray(dimensionesSecundarias)) {
-          dimensionesSecundarias.forEach(dimSec => {
-            if (puntuaciones.hasOwnProperty(dimSec)) {
-              puntuaciones[dimSec] += peso * 0.3; // 30% del peso principal
+          
+          // Si la pregunta tiene opciones, también considerar dimensiones secundarias
+          // según el tipo de pregunta
+          if (tieneOpciones) {
+            const dimensionesSecundarias = pregunta.dimension_secundaria || [];
+            if (Array.isArray(dimensionesSecundarias)) {
+              dimensionesSecundarias.forEach(dimSec => {
+                if (puntuaciones.hasOwnProperty(dimSec)) {
+                  puntuaciones[dimSec] += peso * 0.2; // 20% del peso principal para opciones
+                }
+              });
             }
-          });
+          }
+        } else {
+          // Si la respuesta es false y hay opciones, podría corresponder a otra dimensión
+          // Por ahora, no sumamos puntos si es false
         }
       }
     }
@@ -243,32 +383,33 @@ class TestOrientacionService {
       'Tecnología': 'Realista',
     };
 
-    // Analizar rendimiento por área
-    const asignaturasPorArea = trayectoriaAcademica.asignaturas_por_area || {};
+    // Analizar rendimiento por área usando materias destacadas
+    const materiasDestacadas = trayectoriaAcademica.materias_destacadas || [];
+    const promedioGeneral = parseFloat(trayectoriaAcademica.promedio_general_acumulado) || 0;
     
-    Object.keys(asignaturasPorArea).forEach(area => {
-      const dimensionEsperada = mapeoAreas[area];
+    // Si hay materias destacadas, analizar correlaciones
+    materiasDestacadas.forEach(materia => {
+      const dimensionEsperada = mapeoAreas[materia];
       if (dimensionEsperada && puntuaciones[dimensionEsperada]) {
-        const rendimiento = asignaturasPorArea[area]?.promedio || 0;
         const puntuacionTest = puntuaciones[dimensionEsperada] || 0;
 
-        // Si hay buen rendimiento académico pero baja puntuación en el test
-        if (rendimiento > 15 && puntuacionTest < 40) {
+        // Si hay buen rendimiento académico (promedio alto) pero baja puntuación en el test
+        if (promedioGeneral > 15 && puntuacionTest < 40) {
           discrepancias.push({
             dimension: dimensionEsperada,
-            area_academica: area,
-            rendimiento_academico: rendimiento,
+            area_academica: materia,
+            rendimiento_academico: promedioGeneral,
             puntuacion_test: puntuacionTest,
             necesita_validacion: true,
             tipo: 'bajo_interes_alto_rendimiento',
           });
         }
         // Si hay baja puntuación académica pero alto interés en el test
-        else if (rendimiento < 12 && puntuacionTest > 70) {
+        else if (promedioGeneral < 12 && puntuacionTest > 70) {
           discrepancias.push({
             dimension: dimensionEsperada,
-            area_academica: area,
-            rendimiento_academico: rendimiento,
+            area_academica: materia,
+            rendimiento_academico: promedioGeneral,
             puntuacion_test: puntuacionTest,
             necesita_validacion: true,
             tipo: 'alto_interes_bajo_rendimiento',
@@ -312,7 +453,7 @@ class TestOrientacionService {
     try {
       const sesiones = await SesionesTestOrientacion.findAll({
         where: {
-          usuarioId: usuarioId,
+          usuario_id: usuarioId,
           estado: {
             [Op.in]: ['ronda_1_completada', 'ronda_2_completada', 'finalizada'],
           },
@@ -335,6 +476,7 @@ class TestOrientacionService {
   /**
    * Calcula el nivel de confianza general
    */
+  
   calcularNivelConfianza(puntuaciones) {
     const valores = Object.values(puntuaciones);
     const max = Math.max(...valores);
@@ -345,6 +487,18 @@ class TestOrientacionService {
     return Math.min(100, Math.max(0, diferencia));
   }
 
+  calcularNivelConfianzaEstadistico(puntuaciones) {
+    const valores = Object.values(puntuaciones);
+    const n = valores.length;
+    const promedio = valores.reduce((a, b) => a + b) / n;
+    
+    // Calculamos qué tan lejos está cada punto del promedio
+    const varianza = valores.reduce((a, b) => a + Math.pow(b - promedio, 2), 0) / n;
+    const desviacionEstandar = Math.sqrt(varianza);
+  
+    // Multiplicamos por un factor (ej. 2) para llevarlo a escala 0-100
+    return Math.min(100, Math.round(desviacionEstandar * 2));
+  }
   /**
    * Obtiene el peso numérico de una pregunta
    */

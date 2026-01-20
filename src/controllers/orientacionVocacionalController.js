@@ -42,7 +42,7 @@ class OrientacionVocacionalController {
 
     return sendSuccess(res, {
       sesionId: sesion.id,
-      tipoTest: sesion.tipoTest,
+      tipoTest: sesion.tipo_test,
       estado: sesion.estado,
       preguntas: preguntasFormateadas,
       fechaInicio: sesion.fecha_inicio,
@@ -153,13 +153,13 @@ class OrientacionVocacionalController {
     }
 
     // Verificar que la sesión pertenece al usuario
-    if (sesion.usuarioId !== usuarioId) {
+    if (sesion.usuario_id !== usuarioId) {
       throw new ApiError(403, 'No tienes permisos para acceder a esta sesión');
     }
 
     return sendSuccess(res, {
       id: sesion.id,
-      tipoTest: sesion.tipoTest,
+      tipoTest: sesion.tipo_test,
       estado: sesion.estado,
       fechaInicio: sesion.fecha_inicio,
       fechaRonda1: sesion.fecha_ronda_1,
@@ -189,7 +189,7 @@ class OrientacionVocacionalController {
     }
 
     // Verificar que la sesión pertenece al usuario
-    if (sesion.usuarioId !== usuarioId) {
+    if (sesion.usuario_id !== usuarioId) {
       throw new ApiError(403, 'No tienes permisos para acceder a esta sesión');
     }
 
@@ -197,10 +197,57 @@ class OrientacionVocacionalController {
       where: { sesion_id: sesionId }
     });
 
-    if (!resultado) {
-      throw new ApiError(404, 'Resultados no encontrados para esta sesión');
+    // Si no hay resultado pero la sesión está en ronda_2_completada, intentar procesarlo
+    if (!resultado && sesion.estado === 'ronda_2_completada') {
+      try {
+        // Intentar procesar el test si aún no se ha procesado
+        const resultadoNuevo = await orientacionVocacionalService.procesarTestCompletado(sesionId);
+        return sendSuccess(res, {
+          id: resultadoNuevo.id,
+          sesionId: resultadoNuevo.sesion_id,
+          tipoTest: resultadoNuevo.tipo_test,
+          puntuacionesFinales: resultadoNuevo.puntuaciones_finales,
+          codigoHolland: resultadoNuevo.codigo_holland,
+          perfilDominante: resultadoNuevo.perfil_dominante,
+          perfilSecundario: resultadoNuevo.perfil_secundario,
+          nivelConfianzaGeneral: resultadoNuevo.nivel_confianza_general,
+          analisisLLM: resultadoNuevo.analisis_llm,
+          recomendacionesCarreras: resultadoNuevo.recomendaciones_carreras,
+          perfilVocacional: resultadoNuevo.perfil_vocacional,
+          trayectoriaAcademicaAnalizada: resultadoNuevo.trayectoria_academica_analizada,
+          areasDesarrollo: resultadoNuevo.areas_desarrollo,
+          sugerenciasAcompanamiento: resultadoNuevo.sugerencias_acompanamiento,
+          planDesarrollo: resultadoNuevo.plan_desarrollo,
+          fechaGeneracion: resultadoNuevo.fecha_generacion,
+        }, 'Resultados obtenidos exitosamente');
+      } catch (error) {
+        // Si falla el procesamiento, retornar información parcial de la sesión
+        return sendSuccess(res, {
+          sesionId: sesion.id,
+          estado: sesion.estado,
+          tipoTest: sesion.tipo_test,
+          puntuacionesRonda1: sesion.puntuaciones_ronda_1 || {},
+          puntuacionesRonda2: sesion.puntuaciones_ronda_2 || {},
+          mensaje: 'Los resultados están siendo procesados. Intenta nuevamente en unos momentos.',
+          procesando: true,
+        }, 'Resultados en proceso');
+      }
     }
 
+    // Si no hay resultado y la sesión no está completada
+    if (!resultado) {
+      return sendSuccess(res, {
+        sesionId: sesion.id,
+        estado: sesion.estado,
+        tipoTest: sesion.tipo_test,
+        puntuacionesRonda1: sesion.puntuaciones_ronda_1 || {},
+        puntuacionesRonda2: sesion.puntuaciones_ronda_2 || {},
+        mensaje: 'El test aún no ha sido completado. Los resultados estarán disponibles una vez que completes la ronda 2.',
+        completado: false,
+      }, 'Test en progreso');
+    }
+
+    // Si hay resultado, retornarlo completo
     return sendSuccess(res, {
       id: resultado.id,
       sesionId: resultado.sesion_id,

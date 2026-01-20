@@ -1,13 +1,13 @@
 "use strict";
-const { Model } = require('DataTypes');
+const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
     class RespuestasTestOrientacion extends Model {
     
         static associate(models) {
-            RespuestasTestOrientacion.belongsTo(models.SesionesTestOrientacion, { foreignKey: 'sesion_id' });
-            RespuestasTestOrientacion.belongsTo(models.PreguntasOrientacion, { foreignKey: 'pregunta_id' });
-            RespuestasTestOrientacion.belongsTo(models.Usuarios, { foreignKey: 'usuario_id' });
+            RespuestasTestOrientacion.belongsTo(models.SesionesTestOrientacion, { foreignKey: 'sesion_id', as: 'sesion' });
+            RespuestasTestOrientacion.belongsTo(models.PreguntasOrientacion, { foreignKey: 'pregunta_id', as: 'pregunta' });
+            RespuestasTestOrientacion.belongsTo(models.Usuario, { foreignKey: 'usuario_id', as: 'usuario' });
         }
     }
 
@@ -16,9 +16,9 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.UUID,
                 allowNull: false,
                 primaryKey: true,
-                defaultValue: DataTypes.literal('gen_random_uuid()'),
+                defaultValue: sequelize.literal('gen_random_uuid()'),
               },
-              sesionId: {
+              sesion_id: {
                 type: DataTypes.UUID,
                 allowNull: false,
                 references: {
@@ -38,7 +38,7 @@ module.exports = (sequelize, DataTypes) => {
                 onUpdate: 'CASCADE',
                 onDelete: 'CASCADE',
               },
-              usuarioId: {
+              usuario_id: {
                 type: DataTypes.UUID,
                 allowNull: false,
                 references: {
@@ -81,18 +81,18 @@ module.exports = (sequelize, DataTypes) => {
               time_stamp_respuesta: {
                 type: DataTypes.DATE,
                 allowNull: false,
-                defaultValue: DataTypes.literal('NOW()'),
+                defaultValue: sequelize.literal('NOW()'),
                 comment: 'Timestamp de la respuesta',
               },
               created_at: {
                 type: DataTypes.DATE,
                 allowNull: false,
-                defaultValue: DataTypes.literal('NOW()'),
+                defaultValue: sequelize.literal('NOW()'),
               },
               updated_at: {
                 type: DataTypes.DATE,
                 allowNull: false,
-                defaultValue: DataTypes.literal('NOW()'),
+                defaultValue: sequelize.literal('NOW()'),
               },
         },
         {

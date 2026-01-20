@@ -42,7 +42,7 @@ class OrientacionVocacionalService {
             );
 
             // 3. Recopilación de contexto (Trayectoria y Carreras)
-            const trayectoria = await trayectoriaAcademicaService.obtenerTrayectoriaActual(sesion.usuarioId);
+            const trayectoria = await trayectoriaAcademicaService.obtenerTrayectoriaActual(sesion.usuario_id);
             const carreras = await Career.findAll({
                 where: { is_active: true },
                 attributes: ['id', 'name', 'description', 'profile', 'job_field', 'faculty', 'area'],
@@ -60,8 +60,8 @@ class OrientacionVocacionalService {
             // 6. Persistencia del resultado
             const resultado = await ResultadosOrientacion.create({
                 sesion_id: sesionId,
-                usuario_id: sesion.usuarioId,
-                tipo_test: sesion.tipoTest,
+                usuario_id: sesion.usuario_id,
+                tipo_test: sesion.tipo_test,
                 puntuaciones_finales: puntuacionesFinales,
                 codigo_holland: codigoHolland,
                 perfil_dominante: perfiles.dominante,
@@ -234,17 +234,18 @@ class OrientacionVocacionalService {
      */
 
     formatearPerfilEstudiante(t) {
-        if (!t) return 'No hay información académica disponible.';
-        return `Promedio General: ${t.promedio_general_acumulado || 'N/A'}
+      if (!t) return 'No hay información académica disponible.';
+      return `Promedio General: ${t.promedio_general_acumulado || 'N/A'}
 Grado Actual: ${t.grado_actual || 'N/A'}
-Materias Destacadas: ${(t.materias_destacadas || []).join(', ')}`;
+Materias Destacadas: ${(t.materias_destacadas || []).join(', ')}
+Actividades Extracurriculares: ${(t.actividades_extracurriculares || []).join(', ')}`;
     }
 
     formatearResultadosTest(sesion, puntuaciones) {
         const codigoHolland = this.calcularCodigoHolland(puntuaciones);
         const perfiles = this.obtenerPerfilesDominantes(puntuaciones);
         
-        return `Tipo de Test: ${sesion.tipoTest}
+        return `Tipo de Test: ${sesion.tipo_test}
 Código Holland: ${codigoHolland}
 Perfil Dominante: ${perfiles.dominante}
 Perfil Secundario: ${perfiles.secundario}
