@@ -37,6 +37,13 @@ db.ConfiguracionBeca = require('./ConfiguracionBeca')(sequelize, DataTypes);
 db.Auditoria = require('./Auditoria')(sequelize, DataTypes);
 db.Career = require('./Career')(sequelize, DataTypes);
 
+// Modelos de Orientación Vocacional
+db.PreguntasOrientacion = require('./PreguntasOrientacion')(sequelize, DataTypes);
+db.SesionesTestOrientacion = require('./SesionesTestOrientacion')(sequelize, DataTypes);
+db.RespuestasTestOrientacion = require('./RespuestasTestOrientacion')(sequelize, DataTypes);
+db.ResultadosOrientacion = require('./ResultadosOrientacion')(sequelize, DataTypes);
+db.TrayectoriasEscolares = require('./TrayectoriasEscolares')(sequelize, DataTypes);
+
 // Define associations
 Object.keys(db).forEach(modelName => {
   if (db[modelName].associate) {
