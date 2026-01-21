@@ -286,18 +286,39 @@ class OrientacionVocacionalController {
    */
   obtenerHistorial = asyncHandler(async (req, res) => {
     const usuarioId = req.user.id;
+    console.log('📥 [obtenerHistorial Controller] Usuario ID:', usuarioId);
 
     const historial = await testOrientacionService.obtenerHistorial(usuarioId);
+    console.log('📦 [obtenerHistorial Controller] Historial recibido:', historial ? historial.length : 'null/undefined');
 
-    const historialFormateado = historial.map(sesion => ({
-      id: sesion.id,
-      tipoTest: sesion.tipoTest,
-      estado: sesion.estado,
-      fechaInicio: sesion.fecha_inicio,
-      fechaCompletada: sesion.fecha_completada,
-      puntuacionesRonda1: sesion.puntuaciones_ronda_1,
-      puntuacionesRonda2: sesion.puntuaciones_ronda_2,
-    }));
+    // Validar que historial sea un array
+    if (!Array.isArray(historial)) {
+      console.error('❌ [obtenerHistorial Controller] Historial no es un array:', typeof historial);
+      return sendSuccess(res, {
+        historial: [],
+        total: 0,
+      }, 'Historial obtenido exitosamente (vacío)');
+    }
+
+    const historialFormateado = historial.map(sesion => {
+      // resultado es un array porque es hasMany, tomar el primero si existe
+      const resultado = Array.isArray(sesion.resultado) 
+        ? sesion.resultado[0] 
+        : sesion.resultado;
+      
+      return {
+        id: sesion.id,
+        tipoTest: sesion.tipo_test, // CORRECCIÓN: usar snake_case
+        estado: sesion.estado || 'iniciada', // Si no tiene estado, asumir 'iniciada'
+        fechaInicio: sesion.fecha_inicio,
+        fechaCompletada: sesion.fecha_completada,
+        puntuacionesRonda1: sesion.puntuaciones_ronda_1,
+        puntuacionesRonda2: sesion.puntuaciones_ronda_2,
+        tieneResultado: !!resultado, // Indicar si tiene resultado procesado
+      };
+    });
+
+    console.log('✅ [obtenerHistorial Controller] Historial formateado:', historialFormateado.length, 'elementos');
 
     return sendSuccess(res, {
       historial: historialFormateado,

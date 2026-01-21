@@ -14,12 +14,12 @@ class TestOrientacionService {
   /**
    * Crea una nueva sesión de test
    */
-  async crearSesion(usuarioId, tipoTest) {
+  async crearSesion(usuario_id, tipoTest) {
     try {
       const seed = `${Date.now()}-${Math.random()}`;
       
       const sesion = await SesionesTestOrientacion.create({
-        usuario_id: usuarioId,
+        usuario_id: usuario_id,
         tipo_test: tipoTest,
         estado: 'iniciada',
         seed_aleatorio: seed,
@@ -118,7 +118,7 @@ class TestOrientacionService {
   /**
    * Guarda las respuestas de la ronda 1
    */
-  async guardarRespuestasRonda1(sesionId, respuestas, usuarioId) {
+  async guardarRespuestasRonda1(sesionId, respuestas, usuario_id) {
     try {
       const sesion = await SesionesTestOrientacion.findByPk(sesionId);
       if (!sesion) {
@@ -143,7 +143,7 @@ class TestOrientacionService {
         const respuestaGuardada = await RespuestasTestOrientacion.create({
           sesion_id: sesionId,
           pregunta_id: respuesta.preguntaId,
-          usuario_id: usuarioId,
+          usuario_id: usuario_id,
           ronda: 1,
           respuesta: respuestaNormalizada,
           respuesta_correcta: respuesta.respuestaCorrecta || false,
@@ -182,7 +182,7 @@ class TestOrientacionService {
   /**
    * Guarda las respuestas de la ronda 2
    */
-  async guardarRespuestasRonda2(sesionId, respuestas, usuarioId) {
+  async guardarRespuestasRonda2(sesionId, respuestas, usuario_id) {
     try {
       const sesion = await SesionesTestOrientacion.findByPk(sesionId);
       if (!sesion) {
@@ -207,7 +207,7 @@ class TestOrientacionService {
         const respuestaGuardada = await RespuestasTestOrientacion.create({
           sesion_id: sesionId,
           pregunta_id: respuesta.preguntaId,
-          usuario_id: usuarioId,
+          usuario_id: usuario_id,
           ronda: 2,
           respuesta: respuestaNormalizada,
           respuesta_correcta: respuesta.respuestaCorrecta || false,
@@ -448,27 +448,101 @@ class TestOrientacionService {
 
   /**
    * Obtiene el historial de tests de un usuario
+   * Incluye todas las sesiones excepto las abandonadas
    */
-  async obtenerHistorial(usuarioId) {
+  async obtenerHistorial(usuario_id) {
     try {
-      const sesiones = await SesionesTestOrientacion.findAll({
-        where: {
-          usuario_id: usuarioId,
-          estado: {
-            [Op.in]: ['ronda_1_completada', 'ronda_2_completada', 'finalizada'],
-          },
-        },
-        include: [
-          {
-            model: ResultadosOrientacion,
-            as: 'resultado',
-          },
-        ],
-        order: [['fecha_inicio', 'DESC']],
-      });
+      console.log('🔍 [obtenerHistorial] Buscando historial para usuario:', usuario_id);
+      console.log('🔍 [obtenerHistorial] Tipo de usuario_id:', typeof usuario_id);
+      
+      // Primero, verificar el nombre real de las columnas en la BD
+      const { sequelize } = SesionesTestOrientacion;
+      const [columnInfo] = await sequelize.query(
+        `SELECT column_name FROM information_schema.columns 
+         WHERE table_name = 'sesiones_test_orientacion' 
+         AND column_name LIKE '%usuario%' 
+         ORDER BY column_name`,
+        { type: sequelize.QueryTypes.SELECT }
+      );
+      console.log('📋 [obtenerHistorial] Columnas relacionadas con usuario:', columnInfo);
+      
+      // Intentar consulta SQL directa con diferentes nombres posibles
+      const posiblesNombres = ['usuario_id', 'usuario_id', 'usuario_id'];
+      let sesionesEncontradas = null;
+      
+      for (const nombreColumna of posiblesNombres) {
+        try {
+          const [results] = await sequelize.query(
+            `SELECT id, estado, "${nombreColumna}" as usuario_id FROM sesiones_test_orientacion WHERE "${nombreColumna}" = :usuario_id LIMIT 5`,
+            {
+              replacements: { usuario_id },
+              type: sequelize.QueryTypes.SELECT
+            }
+          );
+          if (results && results.length > 0) {
+            console.log(`✅ [obtenerHistorial] Encontradas ${results.length} sesiones con columna "${nombreColumna}"`);
+            sesionesEncontradas = results;
+            break;
+          }
+        } catch (err) {
+          // Continuar con el siguiente nombre
+          console.log(`⚠️ [obtenerHistorial] Columna "${nombreColumna}" no existe o error:`, err.message);
+        }
+      }
+      
+      // Si encontramos sesiones con SQL directo, usar Sequelize con el nombre correcto
+      if (sesionesEncontradas && sesionesEncontradas.length > 0) {
+        console.log('📊 [obtenerHistorial] Sesiones encontradas con SQL directo:', sesionesEncontradas.length);
+      }
 
-      return sesiones;
+      // Construir condición WHERE: incluir todas excepto abandonadas, y también incluir null
+      const whereCondition = {
+        usuario_id: usuario_id,
+        [Op.or]: [
+          { estado: { [Op.not]: 'abandonada' } },
+          { estado: null }, // Incluir sesiones sin estado definido
+        ],
+      };
+
+      // Ahora buscar con el filtro y el include usando Sequelize
+      let sesiones = [];
+      try {
+        sesiones = await SesionesTestOrientacion.findAll({
+          where: whereCondition,
+          include: [
+            {
+              model: ResultadosOrientacion,
+              as: 'resultado',
+              required: false, // LEFT JOIN para incluir sesiones sin resultado
+            },
+          ],
+          order: [['fecha_inicio', 'DESC']],
+        });
+        console.log('✅ [obtenerHistorial] Sesiones filtradas encontradas con Sequelize:', sesiones.length);
+      } catch (sequelizeError) {
+        console.error('❌ [obtenerHistorial] Error con Sequelize:', sequelizeError.message);
+        // Si falla Sequelize, intentar con SQL directo usando el nombre de columna que encontramos
+        if (sesionesEncontradas) {
+          console.log('🔄 [obtenerHistorial] Usando resultados de consulta SQL directa');
+          // Convertir resultados SQL a formato Sequelize
+          const sesionesIds = sesionesEncontradas.map(s => s.id);
+          sesiones = await SesionesTestOrientacion.findAll({
+            where: { id: { [Op.in]: sesionesIds } },
+            include: [
+              {
+                model: ResultadosOrientacion,
+                as: 'resultado',
+                required: false,
+              },
+            ],
+            order: [['fecha_inicio', 'DESC']],
+          });
+        }
+      }
+
+      return sesiones || []; // Asegurar que siempre retorne un array
     } catch (error) {
+      console.error('❌ [obtenerHistorial] Error:', error);
       this._handleError('obtenerHistorial', error);
     }
   }

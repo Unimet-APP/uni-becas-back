@@ -20,6 +20,8 @@ module.exports = (sequelize, DataTypes) => {
         usuario_id: {
             type: DataTypes.UUID,
             allowNull: false,
+            // Sin field: usa el nombre del atributo directamente (usuario_id)
+            // La migración renombrará la columna de usuarioId/usuarioid a usuario_id
             references: {
                 model: 'usuarios',
                 key: 'id'
@@ -31,6 +33,8 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.ENUM('Holland_RIASEC', 'Kuder'),
             allowNull: false,
             defaultValue: 'Holland_RIASEC',
+            // Sin field: usa el nombre del atributo directamente (tipo_test)
+            // La migración renombrará la columna de tipoTest/tipotest a tipo_test
         },
         estado: {
             type: DataTypes.ENUM('iniciada', 'ronda_1_completada', 'ronda_2_completada', 'finalizada', 'abandonada'),
