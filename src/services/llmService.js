@@ -35,6 +35,35 @@ class LLMService {
   }
 
   /**
+ * Genera una respuesta del LLM forzando formato JSON
+ * @param {string} prompt - El prompt a enviar al LLM
+ * @returns {Promise<string>} - Respuesta del LLM en formato JSON
+ */
+async generarRespuestaJSON(prompt) {
+  try {
+    // Crear modelo con configuración específica para JSON
+    const modelJSON = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: {
+        ...generationConfig,
+        temperature: 0.3,  // Más determinista
+        responseMimeType: 'application/json',  // Forzar JSON
+      },
+      safetySettings
+    });
+    
+    const result = await modelJSON.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    
+    return text;
+  } catch (error) {
+    console.error('Error en LLM Service (JSON):', error);
+    throw new ApiError(500, `Error al generar respuesta JSON del LLM: ${error.message || 'Error desconocido'}`);
+  }
+}
+
+  /**
    * Genera recomendaciones de carrera basadas en perfil del estudiante
    * @param {Object} perfilEstudiante - Datos del estudiante
    * @param {Array} carrerasDisponibles - Lista de carreras

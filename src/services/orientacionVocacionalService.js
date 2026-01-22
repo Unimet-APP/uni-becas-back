@@ -43,19 +43,27 @@ class OrientacionVocacionalService {
 
             // 3. Recopilación de contexto (Trayectoria y Carreras)
             const trayectoria = await trayectoriaAcademicaService.obtenerTrayectoriaActual(sesion.usuario_id);
-            const carreras = await Career.findAll({
-                where: { is_active: true },
-                attributes: ['id', 'name', 'description', 'profile', 'job_field', 'faculty', 'area'],
-            });
-
-            // 4. Inteligencia Artificial (LLM)
-            const prompt = this.construirPromptAnalisis(sesion, puntuacionesFinales, trayectoria, carreras);
-            const respuestaLLM = await llmService.generarRespuesta(prompt);
-            const analisisLLM = this.parsearRespuestaLLM(respuestaLLM);
-
+            
             // 5. Perfilamiento Holland
             const codigoHolland = this.calcularCodigoHolland(puntuacionesFinales);
             const perfiles = this.obtenerPerfilesDominantes(puntuacionesFinales);
+
+            const carreras = await Career.findAll({
+                where: { is_active: true },
+                limit: 12,
+                attributes: ['id', 'name', 'description', 'profile', 'job_field', 'faculty', 'area'],
+            });
+
+
+            // 4. Inteligencia Artificial (LLM)
+            const prompt = this.construirPromptAnalisis(sesion, puntuacionesFinales, trayectoria, carreras);
+            console.log('🤖 [procesarTestCompletado] Enviando prompt al LLM...');
+            const respuestaLLM = await llmService.generarRespuestaJSON(prompt);
+            console.log('✅ [procesarTestCompletado] Respuesta del LLM recibida (longitud:', respuestaLLM.length, 'chars)');
+            const analisisLLM = this.parsearRespuestaLLM(respuestaLLM);
+            console.log('✅ [procesarTestCompletado] Respuesta parseada exitosamente');
+
+            
 
             // 6. Persistencia del resultado
             const resultado = await ResultadosOrientacion.create({
@@ -181,6 +189,14 @@ class OrientacionVocacionalService {
 
         return `Eres un orientador vocacional experto de la Universidad Metropolitana.
         
+        INSTRUCCIONES CRÍTICAS - DEBES SEGUIRLAS EXACTAMENTE:
+        1. Responde ÚNICAMENTE con un objeto JSON válido
+        2. NO incluyas saludos, explicaciones ni texto narrativo
+        3. NO uses bloques de código markdown (NO uses \`\`\`json)
+        4. NO agregues texto antes o después del JSON
+        5. El JSON debe comenzar con { y terminar con }
+        6. Completa TODOS los campos con información relevante
+
         PERFIL DEL ESTUDIANTE:
         ${perfilEstudiante}
         
@@ -190,15 +206,27 @@ class OrientacionVocacionalService {
         CARRERAS DISPONIBLES:
         ${carrerasFormateadas}
         
-        TAREA: Genera un análisis profundo en formato JSON con la siguiente estructura:
+        FORMATO DE RESPUESTA (responde SOLO esto, sin texto adicional):
         {
-            "analisisGeneral": "Análisis general del perfil del estudiante",
-            "carrerasRecomendadas": [{"id": 1, "name": "Nombre", "razon": "Por qué es adecuada"}],
-            "perfilVocacional": {"fortalezas": [], "debilidades": [], "oportunidades": []},
-            "areasDesarrollo": ["Área 1", "Área 2"],
-            "sugerenciasAcompanamiento": ["Sugerencia 1", "Sugerencia 2"],
-            "planDesarrollo": {"cortoPlazo": [], "medianoPlazo": [], "largoPlazo": []}
-        }`;
+            "analisisGeneral": "Análisis de máximo 150 palabras focalizado en los resultados.",
+            "carrerasRecomendadas": [
+                {"id": 1, "name": "Nombre", "razon": "Máximo 30 palabras"}
+            ],
+            "perfilVocacional": {
+                "fortalezas": ["Fortaleza 1", "Fortaleza 2", "Fortaleza 3"],
+                "debilidades": ["Debilidad 1", "Debilidad 2"],
+                "oportunidades": ["Oportunidad 1", "Oportunidad 2", "Oportunidad 3"]
+            },
+            "areasDesarrollo": ["Área de desarrollo 1", "Área de desarrollo 2", "Área de desarrollo 3"],
+            "sugerenciasAcompanamiento": ["Sugerencia 1", "Sugerencia 2", "Sugerencia 3"],
+            "planDesarrollo": {
+                "cortoPlazo": ["Acción corto plazo 1", "Acción corto plazo 2"],
+                "medianoPlazo": ["Acción mediano plazo 1", "Acción mediano plazo 2"],
+                "largoPlazo": ["Acción largo plazo 1", "Acción largo plazo 2"]
+            }
+        }
+
+       RECUERDA: La respuesta total DEBE ser menor a 1500 tokens. Corta el análisis si es necesario para cerrar el JSON.`;
     }
 
     construirPromptRecomendacionesContinuas(resultado, trayectoria, carreras) {
@@ -294,11 +322,269 @@ Puntuaciones: ${JSON.stringify(puntuaciones, null, 2)}`;
 
     parsearRespuestaLLM(texto) {
         try {
-            const jsonMatch = texto.match(/\{[\s\S]*\}/);
-            return jsonMatch ? JSON.parse(jsonMatch[0]) : { analisisGeneral: texto };
+            console.log('🔍 [parsearRespuestaLLM] Texto recibido (primeros 500 chars):', texto.substring(0, 500));
+            
+            // 1. Intentar extraer JSON de bloques de código markdown (```json ... ```)
+            let jsonText = texto;
+            
+            // Buscar bloques de código markdown
+            const codeBlockMatch = texto.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (codeBlockMatch) {
+                jsonText = codeBlockMatch[1].trim();
+                console.log('✅ [parsearRespuestaLLM] JSON extraído de bloque de código markdown');
+            } else {
+                // 2. Si no hay bloque de código, buscar el objeto JSON más grande
+                const jsonMatches = texto.match(/\{[\s\S]*\}/g);
+                if (jsonMatches && jsonMatches.length > 0) {
+                    // Tomar el JSON más largo (probablemente el más completo)
+                    jsonText = jsonMatches.reduce((a, b) => a.length > b.length ? a : b);
+                    console.log('✅ [parsearRespuestaLLM] JSON extraído usando regex (múltiples matches encontrados)');
+                }
+            }
+            
+            // 3. Limpiar el texto: remover saltos de línea extra y espacios
+            jsonText = jsonText.trim();
+            
+            // 4. Intentar parsear el JSON (con manejo de JSON incompleto/truncado)
+            let parsed;
+            try {
+                parsed = JSON.parse(jsonText);
+            } catch (parseError) {
+                // Si falla, puede ser JSON incompleto/truncado
+                console.log('⚠️ [parsearRespuestaLLM] Error al parsear JSON, intentando reparar JSON incompleto...');
+                
+                // Intentar reparar JSON incompleto
+                let jsonReparado = this._intentarRepararJSON(jsonText);
+                
+                try {
+                    parsed = JSON.parse(jsonReparado);
+                    console.log('✅ [parsearRespuestaLLM] JSON reparado y parseado exitosamente');
+                } catch (e) {
+                    // Si aún falla, intentar extraer campos válidos manualmente
+                    console.log('⚠️ [parsearRespuestaLLM] No se pudo reparar JSON, extrayendo campos válidos...');
+                    parsed = this._extraerCamposDeJSONIncompleto(jsonText);
+                }
+            }
+            
+            // 5. Si analisisGeneral es un string que contiene JSON, intentar parsearlo también
+            if (parsed.analisisGeneral && typeof parsed.analisisGeneral === 'string') {
+                // Verificar si el string contiene JSON
+                const nestedJsonMatch = parsed.analisisGeneral.match(/\{[\s\S]*\}/);
+                if (nestedJsonMatch) {
+                    try {
+                        const nestedJson = JSON.parse(nestedJsonMatch[0]);
+                        // Si el JSON anidado tiene más campos, usarlo como base y mergear
+                        if (Object.keys(nestedJson).length > 1) {
+                            console.log('✅ [parsearRespuestaLLM] JSON anidado encontrado en analisisGeneral, mergeando...');
+                            parsed = { ...nestedJson, analisisGeneral: nestedJson.analisisGeneral || parsed.analisisGeneral };
+                        }
+                    } catch (e) {
+                        console.log('⚠️ [parsearRespuestaLLM] No se pudo parsear JSON anidado, usando el original');
+                    }
+                }
+            }
+            
+            // 6. Validar y asegurar estructura esperada
+            const resultado = {
+                analisisGeneral: parsed.analisisGeneral || 'Análisis no disponible',
+                carrerasRecomendadas: parsed.carrerasRecomendadas || [],
+                perfilVocacional: parsed.perfilVocacional || {
+                    fortalezas: [],
+                    debilidades: [],
+                    oportunidades: []
+                },
+                areasDesarrollo: parsed.areasDesarrollo || [],
+                sugerenciasAcompanamiento: parsed.sugerenciasAcompanamiento || [],
+                planDesarrollo: parsed.planDesarrollo || {
+                    cortoPlazo: [],
+                    medianoPlazo: [],
+                    largoPlazo: []
+                }
+            };
+            
+            // 7. Log de validación
+            console.log('📊 [parsearRespuestaLLM] Resultado parseado:');
+            console.log('  - carrerasRecomendadas:', resultado.carrerasRecomendadas.length, 'elementos');
+            console.log('  - perfilVocacional:', Object.keys(resultado.perfilVocacional).length, 'campos');
+            console.log('  - areasDesarrollo:', resultado.areasDesarrollo.length, 'elementos');
+            console.log('  - sugerenciasAcompanamiento:', resultado.sugerenciasAcompanamiento.length, 'elementos');
+            console.log('  - planDesarrollo:', Object.keys(resultado.planDesarrollo).length, 'campos');
+            
+            return resultado;
         } catch (e) {
-            return { analisisGeneral: texto, error: 'Error de parseo JSON' };
+            console.error('❌ [parsearRespuestaLLM] Error al parsear:', e.message);
+            console.error('❌ [parsearRespuestaLLM] Texto original:', texto.substring(0, 1000));
+            return { 
+                analisisGeneral: texto.substring(0, 500), 
+                error: 'Error de parseo JSON',
+                errorDetails: e.message
+            };
         }
+    }
+
+    /**
+     * Intenta reparar JSON incompleto/truncado
+     * @private
+     */
+    _intentarRepararJSON(jsonText) {
+        let reparado = jsonText.trim();
+        
+        // Contar llaves y corchetes abiertos/cerrados
+        const abrirLlaves = (reparado.match(/\{/g) || []).length;
+        const cerrarLlaves = (reparado.match(/\}/g) || []).length;
+        const abrirCorchetes = (reparado.match(/\[/g) || []).length;
+        const cerrarCorchetes = (reparado.match(/\]/g) || []).length;
+        
+        // Si hay un string sin cerrar, intentar cerrarlo
+        if (reparado.match(/"[^"]*$/)) {
+            // String sin cerrar al final
+            reparado = reparado.replace(/"([^"]*)$/, '"$1"');
+        }
+        
+        // Cerrar arrays abiertos
+        for (let i = 0; i < abrirCorchetes - cerrarCorchetes; i++) {
+            reparado += ']';
+        }
+        
+        // Cerrar objetos abiertos
+        for (let i = 0; i < abrirLlaves - cerrarLlaves; i++) {
+            reparado += '}';
+        }
+        
+        return reparado;
+    }
+    
+    /**
+     * Extrae campos válidos de un JSON incompleto/truncado
+     * @private
+     */
+    _extraerCamposDeJSONIncompleto(jsonText) {
+        const resultado = {
+            analisisGeneral: '',
+            carrerasRecomendadas: [],
+            perfilVocacional: { fortalezas: [], debilidades: [], oportunidades: [] },
+            areasDesarrollo: [],
+            sugerenciasAcompanamiento: [],
+            planDesarrollo: { cortoPlazo: [], medianoPlazo: [], largoPlazo: [] }
+        };
+        
+        console.log('🔧 [parsearRespuestaLLM] Extrayendo campos de JSON incompleto...');
+        
+        // Intentar extraer analisisGeneral (puede estar truncado)
+        const analisisMatch = jsonText.match(/"analisisGeneral"\s*:\s*"([^"]*(?:\\.[^"]*)*)"/);
+        if (analisisMatch) {
+            resultado.analisisGeneral = analisisMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+        } else {
+            // Si está truncado, extraer hasta donde se cortó
+            const analisisParcial = jsonText.match(/"analisisGeneral"\s*:\s*"([^"]*?)(?:"|$)/);
+            if (analisisParcial) {
+                resultado.analisisGeneral = analisisParcial[1]
+                    .replace(/\\"/g, '"')
+                    .replace(/\\n/g, '\n')
+                    .replace(/\\/g, '');
+                console.log('⚠️ [parsearRespuestaLLM] analisisGeneral extraído parcialmente (truncado)');
+            }
+        }
+        
+        // Intentar extraer carrerasRecomendadas (puede estar vacío o incompleto)
+        const carrerasMatch = jsonText.match(/"carrerasRecomendadas"\s*:\s*\[([^\]]*)\]/);
+        if (carrerasMatch && carrerasMatch[1].trim()) {
+            try {
+                resultado.carrerasRecomendadas = JSON.parse('[' + carrerasMatch[1] + ']');
+            } catch (e) {
+                console.log('⚠️ [parsearRespuestaLLM] No se pudo extraer carrerasRecomendadas');
+            }
+        }
+        
+        // Intentar extraer perfilVocacional (puede estar incompleto)
+        const perfilMatch = jsonText.match(/"perfilVocacional"\s*:\s*\{([^}]*)\}/);
+        if (perfilMatch) {
+            try {
+                // Intentar parsear el objeto completo
+                const perfilStr = '{' + perfilMatch[1] + '}';
+                const perfilParsed = JSON.parse(perfilStr);
+                resultado.perfilVocacional = {
+                    fortalezas: perfilParsed.fortalezas || [],
+                    debilidades: perfilParsed.debilidades || [],
+                    oportunidades: perfilParsed.oportunidades || []
+                };
+            } catch (e) {
+                // Si falla, intentar extraer campos individuales
+                const fortalezasMatch = jsonText.match(/"fortalezas"\s*:\s*\[([^\]]*)\]/);
+                const debilidadesMatch = jsonText.match(/"debilidades"\s*:\s*\[([^\]]*)\]/);
+                const oportunidadesMatch = jsonText.match(/"oportunidades"\s*:\s*\[([^\]]*)\]/);
+                
+                if (fortalezasMatch) {
+                    try {
+                        resultado.perfilVocacional.fortalezas = JSON.parse('[' + fortalezasMatch[1] + ']');
+                    } catch (e) {}
+                }
+                if (debilidadesMatch) {
+                    try {
+                        resultado.perfilVocacional.debilidades = JSON.parse('[' + debilidadesMatch[1] + ']');
+                    } catch (e) {}
+                }
+                if (oportunidadesMatch) {
+                    try {
+                        resultado.perfilVocacional.oportunidades = JSON.parse('[' + oportunidadesMatch[1] + ']');
+                    } catch (e) {}
+                }
+            }
+        }
+        
+        // Intentar extraer areasDesarrollo
+        const areasMatch = jsonText.match(/"areasDesarrollo"\s*:\s*\[([^\]]*)\]/);
+        if (areasMatch && areasMatch[1].trim()) {
+            try {
+                resultado.areasDesarrollo = JSON.parse('[' + areasMatch[1] + ']');
+            } catch (e) {}
+        }
+        
+        // Intentar extraer sugerenciasAcompanamiento
+        const sugerenciasMatch = jsonText.match(/"sugerenciasAcompanamiento"\s*:\s*\[([^\]]*)\]/);
+        if (sugerenciasMatch && sugerenciasMatch[1].trim()) {
+            try {
+                resultado.sugerenciasAcompanamiento = JSON.parse('[' + sugerenciasMatch[1] + ']');
+            } catch (e) {}
+        }
+        
+        // Intentar extraer planDesarrollo
+        const planMatch = jsonText.match(/"planDesarrollo"\s*:\s*\{([^}]*)\}/);
+        if (planMatch) {
+            try {
+                const planStr = '{' + planMatch[1] + '}';
+                const planParsed = JSON.parse(planStr);
+                resultado.planDesarrollo = {
+                    cortoPlazo: planParsed.cortoPlazo || [],
+                    medianoPlazo: planParsed.medianoPlazo || [],
+                    largoPlazo: planParsed.largoPlazo || []
+                };
+            } catch (e) {
+                // Intentar extraer campos individuales
+                const cortoMatch = jsonText.match(/"cortoPlazo"\s*:\s*\[([^\]]*)\]/);
+                const medianoMatch = jsonText.match(/"medianoPlazo"\s*:\s*\[([^\]]*)\]/);
+                const largoMatch = jsonText.match(/"largoPlazo"\s*:\s*\[([^\]]*)\]/);
+                
+                if (cortoMatch) {
+                    try {
+                        resultado.planDesarrollo.cortoPlazo = JSON.parse('[' + cortoMatch[1] + ']');
+                    } catch (e) {}
+                }
+                if (medianoMatch) {
+                    try {
+                        resultado.planDesarrollo.medianoPlazo = JSON.parse('[' + medianoMatch[1] + ']');
+                    } catch (e) {}
+                }
+                if (largoMatch) {
+                    try {
+                        resultado.planDesarrollo.largoPlazo = JSON.parse('[' + largoMatch[1] + ']');
+                    } catch (e) {}
+                }
+            }
+        }
+        
+        console.log('✅ [parsearRespuestaLLM] Campos extraídos de JSON incompleto');
+        return resultado;
     }
 
     async actualizarEfectividadPreguntas(sesion) {

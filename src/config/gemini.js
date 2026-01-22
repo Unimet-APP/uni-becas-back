@@ -15,10 +15,11 @@ const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 // Configuración de generación
 const generationConfig = {
-  temperature: 0.7,
+  temperature: 0.3,  // Reducido para respuestas más deterministas y completas
   topK: 40,
   topP: 0.95,
-  maxOutputTokens: 2048,
+  maxOutputTokens: 8192,  // Aumentado para evitar truncamiento de JSON
+  responseMimeType: 'application/json',  // Forzar formato JSON
 };
 
 // Configuración de seguridad
