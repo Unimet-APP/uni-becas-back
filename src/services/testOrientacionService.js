@@ -548,6 +548,28 @@ class TestOrientacionService {
   }
 
   /**
+   * Obtiene el historial de tests de los usuarios para el especialista
+   */
+  async obtenerTodosLosTests() {
+    return await SesionesTestOrientacion.findAll({
+      include: [
+        {
+          model: Usuario,
+          as: 'usuario',
+          attributes: ['id', 'nombre', 'email'] // ✅ Esto está bien
+        },
+        {
+          model: ResultadosOrientacion,
+          as: 'resultado',
+          attributes: ['id', 'perfil_dominante', 'codigo_holland', 'fecha_generacion', 'recomendaciones_carreras'], // ⚠️ Agregar fecha_generacion
+          required: false, // ✅ LEFT JOIN para incluir sesiones sin resultado
+        }
+      ],
+      order: [['fecha_inicio', 'DESC']]
+    });
+  }
+
+  /**
    * Calcula el nivel de confianza general
    */
   

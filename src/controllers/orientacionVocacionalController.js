@@ -353,6 +353,104 @@ class OrientacionVocacionalController {
 
     return sendSuccess(res, analisis, 'Análisis de cambio de carrera generado exitosamente');
   });
+
+  /**
+   * GET /api/v1/orientacion/historial-especialista
+   * Obtiene el historial de tests de los usuario para el especialista 
+   */
+  obtenerHistorialEspecialista = asyncHandler(async (req, res) => {
+    const historial = await testOrientacionService.obtenerTodosLosTests();
+  
+    // ⚠️ PASO 1: Agrupar por usuario_id
+    const agrupadoPorUsuario = {};
+    
+    historial.forEach(sesion => {
+      const usuarioId = sesion.usuario_id;
+      
+      // Si es la primera vez que vemos este usuario, inicializar
+      if (!agrupadoPorUsuario[usuarioId]) {
+        agrupadoPorUsuario[usuarioId] = {
+          estudiante: {
+            id: sesion.usuario.id,
+            nombre: sesion.usuario.nombre,
+            email: sesion.usuario.email,
+          },
+          sesiones: [],
+          perfilDominante: null,
+          codigoHolland: null,
+          recomendacionesCarreras: null,  // ⚠️ AGREGAR ESTE CAMPO
+          ultimaFechaTest: null,
+        };
+      }
+      
+      // Agregar sesión al array de sesiones del usuario
+      agrupadoPorUsuario[usuarioId].sesiones.push({
+        id: sesion.id,
+        tipoTest: sesion.tipo_test,
+        estado: sesion.estado,
+        fechaInicio: sesion.fecha_inicio,
+        fechaCompletada: sesion.fecha_completada,
+      });
+      
+      // ⚠️ PASO 2: Obtener el resultado más reciente para el perfil
+      // Manejar que resultado puede ser array (hasMany) o objeto (hasOne)
+      const resultado = Array.isArray(sesion.resultado) 
+      ? sesion.resultado[0]  // Si es array, tomar el primero
+      : sesion.resultado;     // Si es objeto, usarlo directamente
+
+      // ⚠️ CAMBIO: Verificar si tiene resultado (no solo perfil_dominante)
+      if (resultado) {
+      const fechaResultado = resultado.fecha_generacion || sesion.fecha_completada;
+      const fechaActual = agrupadoPorUsuario[usuarioId].ultimaFechaTest;
+
+      // Si no tenemos perfil o este es más reciente, actualizar
+      if (!fechaActual || (fechaResultado && fechaResultado > fechaActual)) {
+        // Actualizar perfil solo si existe
+        if (resultado.perfil_dominante) {
+          agrupadoPorUsuario[usuarioId].perfilDominante = resultado.perfil_dominante;
+        }
+        if (resultado.codigo_holland) {
+          agrupadoPorUsuario[usuarioId].codigoHolland = resultado.codigo_holland;
+        }
+        
+        // ⚠️ IMPORTANTE: Manejar JSONB correctamente
+        // JSONB puede venir como objeto parseado o como string
+        let recomendaciones = resultado.recomendaciones_carreras;
+        
+        // Si es string, parsearlo
+        if (typeof recomendaciones === 'string') {
+          try {
+            recomendaciones = JSON.parse(recomendaciones);
+          } catch (e) {
+            recomendaciones = null;
+          }
+        }
+        
+        // Si es array válido, asignarlo
+        if (Array.isArray(recomendaciones) && recomendaciones.length > 0) {
+          agrupadoPorUsuario[usuarioId].recomendacionesCarreras = recomendaciones;
+        } else if (recomendaciones && !Array.isArray(recomendaciones)) {
+          // Si es un objeto único, convertirlo a array
+          agrupadoPorUsuario[usuarioId].recomendacionesCarreras = [recomendaciones];
+        }
+        
+        agrupadoPorUsuario[usuarioId].ultimaFechaTest = fechaResultado;
+      }
+      }
+    });
+    
+    // ⚠️ PASO 3: Convertir el objeto agrupado a array y formatear
+    const historialFormateado = Object.values(agrupadoPorUsuario).map(usuario => ({
+      estudiante: usuario.estudiante,
+      perfilDominante: usuario.perfilDominante || 'No disponible',
+      codigoHolland: usuario.codigoHolland || 'N/A',
+      recomendacionesCarreras: usuario.recomendacionesCarreras || [],  // ⚠️ CORREGIR: quitar la 's' extra
+      totalSesiones: usuario.sesiones.length,
+      ultimaFechaTest: usuario.ultimaFechaTest,
+    }));
+    
+    return sendSuccess(res, historialFormateado, 'Historial obtenido exitosamente');
+  });
 }
 
 module.exports = new OrientacionVocacionalController();

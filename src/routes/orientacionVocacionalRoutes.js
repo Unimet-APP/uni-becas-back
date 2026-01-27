@@ -189,6 +189,23 @@ router.get(
 
 /**
  * @swagger
+ * /api/v1/orientacion/historial-especialista:
+ *   get:
+ *     summary: Obtiene el historial de tests de los usuarios para el especialista
+ *     tags: [Orientación Vocacional]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+// Rutas de administración**/
+router.get(
+  '/historial-especialista', 
+  //authenticate, 
+ // roleMiddleware(['especialista', 'admin']), // Middleware que verifique el rol
+  orientacionVocacionalController.obtenerHistorialEspecialista
+);
+
+/**
+ * @swagger
  * /api/v1/orientacion/resultados/{sesionId}:
  *   get:
  *     summary: Obtiene los resultados completos de una sesión de test
@@ -317,5 +334,6 @@ router.post(
   validateAnalizarCambioCarrera,
   orientacionVocacionalController.analizarCambioCarrera
 );
+
 
 module.exports = router;
