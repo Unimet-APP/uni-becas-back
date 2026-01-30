@@ -48,10 +48,11 @@ class OrientacionVocacionalService {
             const codigoHolland = this.calcularCodigoHolland(puntuacionesFinales);
             const perfiles = this.obtenerPerfilesDominantes(puntuacionesFinales);
 
+            // Traer TODAS las carreras activas para que el LLM elija según el perfil Holland del usuario
             const carreras = await Career.findAll({
                 where: { is_active: true },
-                limit: 12,
                 attributes: ['id', 'name', 'description', 'profile', 'job_field', 'faculty', 'area'],
+                order: [['id', 'ASC']],
             });
 
 
@@ -63,7 +64,17 @@ class OrientacionVocacionalService {
             const analisisLLM = this.parsearRespuestaLLM(respuestaLLM);
             console.log('✅ [procesarTestCompletado] Respuesta parseada exitosamente');
 
-            
+            // Enriquecer carreras recomendadas con faculty y area desde la BD
+            const carrerasPorId = Object.fromEntries(carreras.map(c => [c.id, c]));
+            const recomendacionesConFaculty = (analisisLLM.carrerasRecomendadas || []).map(rec => {
+                const id = typeof rec.id === 'string' ? parseInt(rec.id, 10) : rec.id;
+                const carrera = carrerasPorId[id];
+                return {
+                    ...rec,
+                    faculty: carrera ? carrera.faculty : null,
+                    area: carrera ? carrera.area : null,
+                };
+            });
 
             // 6. Persistencia del resultado
             const resultado = await ResultadosOrientacion.create({
@@ -79,7 +90,7 @@ class OrientacionVocacionalService {
                     sesion.puntuaciones_ronda_2 || {}
                 ),
                 analisis_llm: analisisLLM,
-                recomendaciones_carreras: analisisLLM.carrerasRecomendadas || [],
+                recomendaciones_carreras: recomendacionesConFaculty,
                 perfil_vocacional: analisisLLM.perfilVocacional || {},
                 trayectoria_academica_analizada: trayectoria ? {
                     promedio_general: trayectoria.promedio_general_acumulado,
@@ -187,6 +198,9 @@ class OrientacionVocacionalService {
         const resultadosTest = this.formatearResultadosTest(sesion, puntuaciones);
         const carrerasFormateadas = this.formatearCarreras(carreras);
 
+        const codigoHolland = this.calcularCodigoHolland(puntuaciones);
+        const perfiles = this.obtenerPerfilesDominantes(puntuaciones);
+
         return `Eres un orientador vocacional experto de la Universidad Metropolitana.
         
         INSTRUCCIONES CRÍTICAS - DEBES SEGUIRLAS EXACTAMENTE:
@@ -196,21 +210,22 @@ class OrientacionVocacionalService {
         4. NO agregues texto antes o después del JSON
         5. El JSON debe comenzar con { y terminar con }
         6. Completa TODOS los campos con información relevante
+        7. CARRERAS: Solo recomienda carreras que estén en la lista "CARRERAS DISPONIBLES". Elige las que MEJOR encajen con el código Holland (${codigoHolland}) y los perfiles dominante (${perfiles.dominante}) y secundario (${perfiles.secundario}). Las recomendaciones DEBEN variar según estos resultados: perfiles Social/Artístico → carreras de personas, creatividad, comunicación; Investigador/Realista → carreras técnicas, ingeniería, análisis; Emprendedor/Convencional → carreras de gestión, organización, negocios. Recomienda entre 3 y 6 carreras de la lista.
 
         PERFIL DEL ESTUDIANTE:
         ${perfilEstudiante}
         
-        RESULTADOS DEL TEST:
+        RESULTADOS DEL TEST (usa esto para elegir las carreras):
         ${resultadosTest}
         
-        CARRERAS DISPONIBLES:
+        CARRERAS DISPONIBLES (solo puedes recomendar IDs de esta lista):
         ${carrerasFormateadas}
         
         FORMATO DE RESPUESTA (responde SOLO esto, sin texto adicional):
         {
             "analisisGeneral": "Análisis de máximo 150 palabras focalizado en los resultados.",
             "carrerasRecomendadas": [
-                {"id": 1, "name": "Nombre", "razon": "Máximo 30 palabras"}
+                {"id": <ID de la lista>, "name": "Nombre exacto de la carrera", "razon": "Máximo 30 palabras vinculando al perfil Holland"}
             ],
             "perfilVocacional": {
                 "fortalezas": ["Fortaleza 1", "Fortaleza 2", "Fortaleza 3"],
@@ -281,8 +296,8 @@ Puntuaciones: ${JSON.stringify(puntuaciones, null, 2)}`;
     }
 
     formatearCarreras(carreras) {
-        return carreras.map(c => 
-            `ID: ${c.id}, Nombre: ${c.name}, Área: ${c.area || 'N/A'}, Descripción: ${c.description || 'N/A'}`
+        return carreras.map(c =>
+            `ID: ${c.id}, Nombre: ${c.name}, Facultad: ${c.faculty || 'N/A'}, Área: ${c.area || 'N/A'}, Perfil: ${(c.profile || c.description || 'N/A').substring(0, 200)}`
         ).join('\n');
     }
 
