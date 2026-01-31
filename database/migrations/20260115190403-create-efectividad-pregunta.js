@@ -110,35 +110,35 @@ module.exports = {
     // Eliminar índices
     try {
       await queryInterface.removeIndex(
-        "efectividad_preguntas",
+        "efectividad_pregunta",
         "idx_efectividad_pregunta"
       );
     } catch (e) {}
 
     try {
       await queryInterface.removeIndex(
-        "efectividad_preguntas",
+        "efectividad_pregunta",
         "idx_efectividad_correcta"
       );
     } catch (e) {}
 
     try {
       await queryInterface.removeIndex(
-        "efectividad_preguntas",
+        "efectividad_pregunta",
         "idx_efectividad_sesion"
       );
     } catch (e) {}
 
     try {
       await queryInterface.removeIndex(
-        "efectividad_preguntas",
+        "efectividad_pregunta",
         "idx_efectividad_fecha"
       );
     } catch (e) {}
 
     // Eliminar tabla
     try {
-      await queryInterface.dropTable("efectividad_preguntas");
+      await queryInterface.dropTable("efectividad_pregunta");
     } catch (e) {}
   
   },

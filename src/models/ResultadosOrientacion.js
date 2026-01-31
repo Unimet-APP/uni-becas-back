@@ -35,7 +35,7 @@ module.exports = (sequelize, DataTypes) => {
 
             // 2. DATOS TÉCNICOS DEL TEST
             tipo_test: {
-            type: DataTypes.ENUM("Kuder", "Holland_RIASEC"),
+            type: DataTypes.ENUM("Kuder", "Holland_RIASEC", "ICO"),
             allowNull: false,
             },
             puntuaciones_finales: {

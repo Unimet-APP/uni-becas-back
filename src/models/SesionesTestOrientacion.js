@@ -30,7 +30,7 @@ module.exports = (sequelize, DataTypes) => {
             onDelete: 'CASCADE',
         },
         tipo_test: {
-            type: DataTypes.ENUM('Holland_RIASEC', 'Kuder'),
+            type: DataTypes.ENUM('Holland_RIASEC', 'Kuder', 'ICO'),
             allowNull: false,
             defaultValue: 'Holland_RIASEC',
             // Sin field: usa el nombre del atributo directamente (tipo_test)

@@ -103,6 +103,31 @@ const sesionIdParamSchema = Joi.object({
     })
 });
 
+// Schema para guardar respuestas test ICO (una sola ronda, todas las preguntas)
+const respuestaICOSchema = Joi.object({
+  pregunta_id: Joi.string().uuid().optional(),
+  preguntaId: Joi.string().uuid().optional(),
+  respuesta: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false', '1', '0'), Joi.number().valid(0, 1)).required()
+    .messages({ 'any.required': 'respuesta es requerida' }),
+  tiempo_respuesta: Joi.number().integer().min(0).optional(),
+  nivel_seguridad: Joi.string().valid('seguro', 'no_seguro').optional(),
+}).or('pregunta_id', 'preguntaId');
+
+const guardarRespuestasICOSchema = Joi.object({
+  sesionId: Joi.string().uuid().required()
+    .messages({ 'string.guid': 'sesionId debe ser UUID válido', 'any.required': 'sesionId es requerido' }),
+  respuestas: Joi.array().items(respuestaICOSchema).min(1).required()
+    .messages({ 'array.min': 'Debe enviar al menos una respuesta', 'any.required': 'Las respuestas son requeridas' }),
+}).custom((value) => {
+  if (value.respuestas) {
+    value.respuestas = value.respuestas.map(r => ({
+      ...r,
+      pregunta_id: r.pregunta_id || r.preguntaId,
+    }));
+  }
+  return value;
+});
+
 // Schema para analizar cambio de carrera
 const analizarCambioCarreraSchema = Joi.object({
   nuevaCarreraId: Joi.number().integer().positive().required()
@@ -141,10 +166,18 @@ const validate = (schema, source = 'body') => {
   };
 };
 
+// Params: sesionId para rutas ICO
+const sesionIdParamICOSchema = Joi.object({
+  sesionId: Joi.string().uuid().required()
+    .messages({ 'string.guid': 'sesionId debe ser UUID válido', 'any.required': 'sesionId es requerido' }),
+});
+
 module.exports = {
   validateIniciarTest: validate(iniciarTestSchema),
   validateGuardarRespuestasRonda1: validate(guardarRespuestasRonda1Schema),
   validateGuardarRespuestasRonda2: validate(guardarRespuestasRonda2Schema),
   validateSesionIdParam: validate(sesionIdParamSchema, 'params'),
   validateAnalizarCambioCarrera: validate(analizarCambioCarreraSchema),
+  validateGuardarRespuestasICO: validate(guardarRespuestasICOSchema),
+  validateSesionIdParamICO: validate(sesionIdParamICOSchema, 'params'),
 };

@@ -152,6 +152,60 @@ Genera recomendaciones en formato JSON con:
   }
 
   /**
+   * Genera recomendaciones para el test ICO usando puntuaciones RIASEC y especificaciones UNIMET.
+   * No modifica el flujo Holland RIASEC existente.
+   * @param {Object} puntuaciones - { Realista, Investigador, Artístico, Social, Emprendedor, Convencional }
+   * @param {string} codigoHolland - Ej: "RIA", "SEC"
+   * @param {Array} carrerasSpecs - Lista de { name, interestCode, faculty, area }
+   * @returns {Promise<string>} - JSON string con analisis_llm para guardar en resultados_orientacion
+   */
+  async generarRecomendacionesICO(puntuaciones, codigoHolland, carrerasSpecs, trayectoria = null) {
+    const carrerasTexto = carrerasSpecs.map((c, i) =>
+      `${i + 1}. ${c.name} (Interest code: ${c.interestCode || 'N/A'}, Facultad: ${c.faculty || 'N/A'}, Área: ${c.area || 'N/A'})`
+    ).join('\n');
+
+    const bloqueTrayectoria = trayectoria && Object.keys(trayectoria).length > 0
+      ? `
+
+TRAYECTORIA ESCOLAR DEL USUARIO (úsala para afinar recomendaciones y razones):
+${JSON.stringify(trayectoria, null, 2)}
+
+Considera esta trayectoria al redactar el perfil vocacional, las razones de cada carrera y las sugerencias de acompañamiento (por ejemplo: materias en las que destaca, grado actual, actividades o proyectos).`
+      : '';
+
+    const prompt = `Eres un orientador vocacional experto. Un usuario completó el test ICO (Inventario de Orientación) y obtuvo las siguientes puntuaciones por dimensión RIASEC (0-100):
+
+PUNTUACIONES:
+- Realista: ${puntuaciones.Realista ?? 0}
+- Investigador: ${puntuaciones.Investigador ?? 0}
+- Artístico: ${puntuaciones.Artístico ?? 0}
+- Social: ${puntuaciones.Social ?? 0}
+- Emprendedor: ${puntuaciones.Emprendedor ?? 0}
+- Convencional: ${puntuaciones.Convencional ?? 0}
+
+Código Holland derivado (top 3 dimensiones): ${codigoHolland}
+${bloqueTrayectoria}
+
+CARRERAS UNIMET DISPONIBLES (solo puedes recomendar de esta lista):
+${carrerasTexto}
+
+INSTRUCCIONES:
+1. Recomienda entre 3 y 6 carreras de la lista que MEJOR encajen con el perfil ICO, el código Holland y, si se proporcionó, la trayectoria escolar.
+2. El interest code de cada carrera usa letras R,I,A,S,E,C; prioriza carreras cuyo código coincida o solape con ${codigoHolland}.
+3. Responde ÚNICAMENTE con un JSON válido, sin markdown ni texto extra, con esta estructura exacta:
+
+{
+  "perfilVocacional": { "resumen": "2-3 oraciones sobre el perfil del usuario según ICO", "fortalezas": ["fortaleza1", "fortaleza2"], "areasExplorar": ["área1", "área2"] },
+  "carrerasRecomendadas": [
+    { "nombre": "Nombre exacto de la carrera de la lista", "razon": "Máximo 40 palabras vinculando al perfil ICO y código Holland" }
+  ],
+  "sugerenciasAcompanamiento": ["sugerencia1", "sugerencia2"]
+}`;
+
+    return await this.generarRespuestaJSON(prompt);
+  }
+
+  /**
    * Chat con historial de conversación
    * ✅ CORREGIDO: Historial excluye el último mensaje y convierte 'assistant' a 'model'
    */

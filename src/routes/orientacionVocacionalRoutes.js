@@ -8,6 +8,8 @@ const {
   validateGuardarRespuestasRonda2,
   validateSesionIdParam,
   validateAnalizarCambioCarrera,
+  validateGuardarRespuestasICO,
+  validateSesionIdParamICO,
 } = require('../validators/orientacionVocacionalValidators');
 
 /**
@@ -185,6 +187,31 @@ router.get(
   authenticate,
   validateSesionIdParam,
   orientacionVocacionalController.obtenerSesion
+);
+
+// --- Test ICO (una sola ronda, todas las preguntas, resultado + LLM) ---
+router.post(
+  '/iniciar-test-ico',
+  authenticate,
+  orientacionVocacionalController.iniciarTestIco
+);
+router.get(
+  '/sesion-ico/:sesionId/preguntas',
+  authenticate,
+  validateSesionIdParamICO,
+  orientacionVocacionalController.obtenerPreguntasIco
+);
+router.post(
+  '/guardar-respuestas-ico',
+  authenticate,
+  validateGuardarRespuestasICO,
+  orientacionVocacionalController.guardarRespuestasIcoYFinalizar
+);
+router.get(
+  '/resultados-ico/:sesionId',
+  authenticate,
+  validateSesionIdParamICO,
+  orientacionVocacionalController.obtenerResultadoIco
 );
 
 /**

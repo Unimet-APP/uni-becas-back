@@ -27,7 +27,7 @@ module.exports = (sequelize, DataTypes) => {
         comment: 'Código único para la pregunta',
       },
       tipo_test: {
-        type: DataTypes.ENUM('Kuder', 'Holland_RIASEC', 'Personalizado'),
+        type: DataTypes.ENUM('Kuder', 'Holland_RIASEC', 'Personalizado', 'ICO'),
         allowNull: false,
       },
       dimension_principal: {

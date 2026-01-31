@@ -4,6 +4,7 @@ const ApiError = require('../utils/ApiError');
 
 const testOrientacionService = require('../services/testOrientacionService');
 const orientacionVocacionalService = require('../services/orientacionVocacionalService');
+const icoOrientacionService = require('../services/icoOrientacionService');
 const preguntasOrientacionService = require('../services/preguntasOrientacion');
 const trayectoriaAcademicaService = require('../services/trayectoriaAcademicaService');
 const { SesionesTestOrientacion, ResultadosOrientacion } = require('../models');
@@ -352,6 +353,70 @@ class OrientacionVocacionalController {
     );
 
     return sendSuccess(res, analisis, 'Análisis de cambio de carrera generado exitosamente');
+  });
+
+  // --- Test ICO (una sola ronda, todas las preguntas, resultado + LLM) ---
+
+  /**
+   * POST /api/v1/orientacion/iniciar-test-ico
+   * Inicia una sesión del test ICO.
+   */
+  iniciarTestIco = asyncHandler(async (req, res) => {
+    const usuarioId = req.user.id;
+    const sesion = await icoOrientacionService.iniciarTestIco(usuarioId);
+    return sendSuccess(res, {
+      sesionId: sesion.id,
+      tipoTest: 'ICO',
+      estado: sesion.estado,
+      fechaInicio: sesion.fecha_inicio,
+    }, 'Sesión ICO iniciada', 201);
+  });
+
+  /**
+   * GET /api/v1/orientacion/sesion-ico/:sesionId/preguntas
+   * Devuelve todas las preguntas del test ICO para la sesión.
+   */
+  obtenerPreguntasIco = asyncHandler(async (req, res) => {
+    const { sesionId } = req.params;
+    const preguntas = await icoOrientacionService.obtenerPreguntasIco(sesionId);
+    const formateadas = preguntas.map(p => ({
+      id: p.id,
+      codigo: p.codigo_pregunta,
+      texto: p.texto__pregunta,
+      tipoPregunta: p.tipo_pregunta,
+      peso: p.peso_pregunta,
+      dimensionPrincipal: p.dimension_principal,
+      opcionesRespuesta: p.instrucciones_respuesta || [],
+    }));
+    return sendSuccess(res, { preguntas: formateadas }, 'Preguntas ICO obtenidas');
+  });
+
+  /**
+   * POST /api/v1/orientacion/guardar-respuestas-ico
+   * Guarda todas las respuestas ICO, calcula puntuaciones, llama al LLM y devuelve el resultado.
+   */
+  guardarRespuestasIcoYFinalizar = asyncHandler(async (req, res) => {
+    const { sesionId, respuestas } = req.body;
+    const payload = await icoOrientacionService.guardarRespuestasIcoYFinalizar(sesionId, respuestas);
+    return sendSuccess(res, {
+      resultadoId: payload.resultado.id,
+      puntuaciones: payload.puntuaciones,
+      codigoHolland: payload.codigoHolland,
+      perfilDominante: payload.perfil_dominante,
+      perfilSecundario: payload.perfil_secundario,
+      analisisLlm: payload.analisis_llm,
+      recomendacionesCarreras: payload.recomendacionesCarreras || payload.analisis_llm?.carrerasRecomendadas || [],
+    }, 'Test ICO finalizado y resultado generado');
+  });
+
+  /**
+   * GET /api/v1/orientacion/resultados-ico/:sesionId
+   * Obtiene el resultado de una sesión ICO finalizada.
+   */
+  obtenerResultadoIco = asyncHandler(async (req, res) => {
+    const { sesionId } = req.params;
+    const resultado = await icoOrientacionService.obtenerResultadoIco(sesionId);
+    return sendSuccess(res, resultado, 'Resultado ICO obtenido');
   });
 
   /**

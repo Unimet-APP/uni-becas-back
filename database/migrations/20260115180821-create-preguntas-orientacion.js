@@ -114,7 +114,7 @@ module.exports = {
       unique: true,
       name: 'idx_preguntas_tipo_dimension',
     });
-    await queryInterface.addIndex('preguntas_orientacion', ['activa','peso'], {
+    await queryInterface.addIndex('preguntas_orientacion', ['activa','peso_pregunta'], {
       name: 'idx_preguntas_activa_peso',
     });
     await queryInterface.addIndex('preguntas_orientacion', ['efectividad_historica'], {
