@@ -1,3 +1,5 @@
+'use strict';
+const { Op } = require('sequelize');
 const { Usuario } = require('../../src/models');
 const bcrypt = require('bcryptjs');
 
@@ -124,42 +126,55 @@ const usuariosData = [
   },
 ];
 
-module.exports = async () => {
-  for (const userData of usuariosData) {
-    // Hash password before creating user
-    const hashedPassword = await bcrypt.hash(userData.password, 12);
+module.exports = {
+  async up(queryInterface, Sequelize) {
+    for (const userData of usuariosData) {
+      // Hash password before creating user
+      const hashedPassword = await bcrypt.hash(userData.password, 12);
 
-    // Build where condition
-    const whereConditions = [
-      { email: userData.email },
-      { cedula: userData.cedula }
-    ];
+      // Build where condition
+      const whereConditions = [
+        { email: userData.email },
+        { cedula: userData.cedula }
+      ];
 
-    await Usuario.findOrCreate({
-      where: {
-        [Usuario.sequelize.Sequelize.Op.or]: whereConditions
+      await Usuario.findOrCreate({
+        where: {
+          [Op.or]: whereConditions,
+        },
+        defaults: {
+          ...userData,
+          password: hashedPassword,
+          emailVerified: true, // Usuarios de prueba con email verificado
+          firstLogin: false, // Usuarios de prueba ya tienen contraseña conocida
+        },
+      });
+    }
+
+    // Actualizar usuarios existentes para marcar email como verificado y firstLogin como false
+    await Usuario.update(
+      {
+        emailVerified: true,
+        firstLogin: false,
       },
-      defaults: {
-        ...userData,
-        password: hashedPassword,
-        emailVerified: true, // Usuarios de prueba con email verificado
-        firstLogin: false // Usuarios de prueba ya tienen contraseña conocida
+      {
+        where: {
+          email: {
+            [Op.in]: usuariosData.map((u) => u.email),
+          },
+        },
       }
-    });
-  }
+    );
+  },
 
-  // Actualizar usuarios existentes para marcar email como verificado y firstLogin como false
-  await Usuario.update(
-    {
-      emailVerified: true,
-      firstLogin: false
-    },
-    {
+  async down(queryInterface, Sequelize) {
+    // Eliminar los usuarios de prueba insertados por este seed
+    await Usuario.destroy({
       where: {
         email: {
-          [Usuario.sequelize.Sequelize.Op.in]: usuariosData.map(u => u.email)
-        }
-      }
-    }
-  );
+          [Op.in]: usuariosData.map((u) => u.email),
+        },
+      },
+    });
+  },
 };

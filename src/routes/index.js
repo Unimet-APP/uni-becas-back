@@ -18,6 +18,7 @@ const dashboardRoutes = require('./dashboardRoutes');
 const llmRoutes = require('./llmRoutes');
 const careersRoutes = require('./careersRoutes');
 const orientacionVocacionalRoutes = require('./orientacionVocacionalRoutes');
+const campanasRoutes = require('./campanasRoutes');
 
 const router = express.Router();
 
@@ -55,6 +56,7 @@ router.use('/v1/audit', auditRoutes);
 router.use('/v1/disponibilidad', disponibilidadRoutes);
 router.use('/v1/llm', llmRoutes);
 router.use('/v1/orientacion', orientacionVocacionalRoutes);
+router.use('/v1/campanas', campanasRoutes);
 
 // API documentation endpoint
 router.get('/', (req, res) => {
