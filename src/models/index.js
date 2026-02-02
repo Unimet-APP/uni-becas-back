@@ -44,6 +44,9 @@ db.RespuestasTestOrientacion = require('./RespuestasTestOrientacion')(sequelize,
 db.ResultadosOrientacion = require('./ResultadosOrientacion')(sequelize, DataTypes);
 db.TrayectoriasEscolares = require('./TrayectoriasEscolares')(sequelize, DataTypes);
 
+// Sistema de Notificaciones
+db.Notificaciones = require('./Notificaciones')(sequelize, DataTypes);
+
 // Define associations
 Object.keys(db).forEach(modelName => {
   if (db[modelName].associate) {

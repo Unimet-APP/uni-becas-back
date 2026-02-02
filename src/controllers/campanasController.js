@@ -3,7 +3,7 @@ const { sendSuccess } = require('../config/responses');
 const ApiError = require('../utils/ApiError');
 const emailService = require('../services/emailService');
 const testOrientacionService = require('../services/testOrientacionService');
-const { SesionesTestOrientacion, ResultadosOrientacion, Usuario } = require('../models');
+const { SesionesTestOrientacion, ResultadosOrientacion, Usuario, Notificaciones } = require('../models');
 const { Op } = require('sequelize');
 
 class CampanasController {
@@ -248,6 +248,27 @@ class CampanasController {
       htmlTemplate
     );
 
+    // Crear notificaciones en la base de datos para los destinatarios exitosos
+    try {
+      const notificacionesData = destinatariosCompletos
+        .filter(dest => dest.id) // Solo crear notificaciones si tenemos el ID del usuario
+        .map(dest => ({
+          usuario_id: dest.id,
+          titulo: asunto,
+          contenido: contenido,
+          tipo: 'campana',
+          metadata: ctaUrl ? { url: ctaUrl, cta: ctaTexto || 'Ver más' } : null
+        }));
+
+      if (notificacionesData.length > 0) {
+        await Notificaciones.bulkCreate(notificacionesData);
+        console.log(`✅ ${notificacionesData.length} notificaciones creadas en el sistema`);
+      }
+    } catch (error) {
+      console.error('⚠️ Error al crear notificaciones:', error.message);
+      // No lanzar error, las notificaciones son secundarias al envío de correos
+    }
+
     return sendSuccess(res, {
       total: resultados.total,
       exitosos: resultados.exitosos,
@@ -307,6 +328,23 @@ class CampanasController {
       asunto,
       htmlTemplate
     );
+
+    // Crear notificaciones en la base de datos para los destinatarios
+    try {
+      const notificacionesData = estudiantes.map(est => ({
+        usuario_id: est.id,
+        titulo: asunto,
+        contenido: contenido,
+        tipo: 'campana',
+        metadata: ctaUrl ? { url: ctaUrl, cta: ctaTexto || 'Ver más' } : null
+      }));
+
+      await Notificaciones.bulkCreate(notificacionesData);
+      console.log(`✅ ${notificacionesData.length} notificaciones creadas para el grupo "${grupo}"`);
+    } catch (error) {
+      console.error('⚠️ Error al crear notificaciones:', error.message);
+      // No lanzar error, las notificaciones son secundarias al envío de correos
+    }
 
     return sendSuccess(res, {
       grupo,
@@ -381,64 +419,32 @@ class CampanasController {
    * Obtiene estadísticas de los grupos predefinidos
    */
   obtenerEstadisticas = asyncHandler(async (req, res) => {
-    const historial = await testOrientacionService.obtenerTodosLosTests();
+    console.log('📊 Obteniendo estadísticas de campañas...');
 
-    // Contar estudiantes por categoría
+    // Usar la misma lógica de segmentación para mantener consistencia
+    const ingenieriaResult = await this._segmentarEstudiantesLogica({ grupo: 'ingenieria' });
+    const artesResult = await this._segmentarEstudiantesLogica({ grupo: 'artes' });
+    const cienciasSocialesResult = await this._segmentarEstudiantesLogica({ grupo: 'ciencias_sociales' });
+
     const stats = {
-      ingenieria: 0,
-      artes: 0,
-      cienciasSociales: 0,
-      otros: 0,
+      ingenieria: ingenieriaResult.total,
+      artes: artesResult.total,
+      cienciasSociales: cienciasSocialesResult.total,
+      otros: 0, // Calculado como diferencia
       total: 0
     };
 
+    // Calcular total y otros
+    const historial = await testOrientacionService.obtenerTodosLosTests();
     const usuariosUnicos = new Set();
-
     historial.forEach(sesion => {
-      const usuarioId = sesion.usuario_id;
-      if (usuariosUnicos.has(usuarioId)) return;
-
-      usuariosUnicos.add(usuarioId);
-      stats.total++;
-
-      const resultado = Array.isArray(sesion.resultado)
-        ? sesion.resultado[0]
-        : sesion.resultado;
-
-      if (!resultado) {
-        stats.otros++;
-        return;
-      }
-
-      const perfil = resultado.perfil_dominante?.toLowerCase() || '';
-      let recomendaciones = resultado.recomendaciones_carreras;
-
-      if (typeof recomendaciones === 'string') {
-        try {
-          recomendaciones = JSON.parse(recomendaciones);
-        } catch (e) {
-          recomendaciones = [];
-        }
-      }
-
-      const carreras = Array.isArray(recomendaciones)
-        ? recomendaciones.map(c => c.name?.toLowerCase() || '').join(' ')
-        : '';
-
-      // Clasificar por grupo
-      if (perfil.includes('lógico') || perfil.includes('investigador') ||
-          carreras.includes('ingeniería') || carreras.includes('sistemas')) {
-        stats.ingenieria++;
-      } else if (perfil.includes('creativo') || perfil.includes('artístico') ||
-                 carreras.includes('diseño') || carreras.includes('arquitectura')) {
-        stats.artes++;
-      } else if (perfil.includes('social') || perfil.includes('humanista') ||
-                 carreras.includes('psicología') || carreras.includes('derecho')) {
-        stats.cienciasSociales++;
-      } else {
-        stats.otros++;
-      }
+      usuariosUnicos.add(sesion.usuario_id);
     });
+
+    stats.total = usuariosUnicos.size;
+    stats.otros = stats.total - (stats.ingenieria + stats.artes + stats.cienciasSociales);
+
+    console.log('📊 Estadísticas calculadas:', stats);
 
     return sendSuccess(res, stats, 'Estadísticas obtenidas exitosamente');
   });
