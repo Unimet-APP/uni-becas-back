@@ -270,6 +270,49 @@ class OrientacionVocacionalController {
   });
 
   /**
+   * GET /api/v1/orientacion/trayectoria-academica
+   * Obtiene la trayectoria académica actual del usuario (para el formulario de bachillerato).
+   */
+  obtenerTrayectoriaAcademica = asyncHandler(async (req, res) => {
+    const usuarioId = req.user.id;
+    const trayectoria = await trayectoriaAcademicaService.obtenerTrayectoriaActual(usuarioId);
+    const data = {
+      id: trayectoria.id,
+      promediosPorAno: trayectoria.promedios_por_ano || {},
+      promedioGeneral: trayectoria.promedio_general_acumulado != null ? Number(trayectoria.promedio_general_acumulado) : null,
+      gradoActual: trayectoria.grado_actual || null,
+      materiasDestacadas: trayectoria.materias_destacadas || [],
+      actividadesExtracurriculares: trayectoria.actividades_extracurriculares || [],
+      proyectosRealizados: trayectoria.proyectos_realizados || [],
+      materiasPorAnoLapso: trayectoria.materias_por_ano_lapso || {},
+      materiasPorArea: trayectoria.materias_por_area || [],
+    };
+    return sendSuccess(res, data, 'Trayectoria académica obtenida');
+  });
+
+  /**
+   * PUT /api/v1/orientacion/trayectoria-academica
+   * Actualiza la trayectoria académica del usuario (formulario de bachillerato).
+   */
+  actualizarTrayectoriaAcademica = asyncHandler(async (req, res) => {
+    const usuarioId = req.user.id;
+    const datos = req.body;
+    const trayectoria = await trayectoriaAcademicaService.actualizarTrayectoria(usuarioId, datos);
+    const data = {
+      id: trayectoria.id,
+      promediosPorAno: trayectoria.promedios_por_ano || {},
+      promedioGeneral: trayectoria.promedio_general_acumulado != null ? Number(trayectoria.promedio_general_acumulado) : null,
+      gradoActual: trayectoria.grado_actual || null,
+      materiasDestacadas: trayectoria.materias_destacadas || [],
+      actividadesExtracurriculares: trayectoria.actividades_extracurriculares || [],
+      proyectosRealizados: trayectoria.proyectos_realizados || [],
+      materiasPorAnoLapso: trayectoria.materias_por_ano_lapso || {},
+      materiasPorArea: trayectoria.materias_por_area || [],
+    };
+    return sendSuccess(res, data, 'Trayectoria académica actualizada');
+  });
+
+  /**
    * GET /api/v1/orientacion/mi-perfil-vocacional
    * Obtiene el perfil vocacional completo del usuario autenticado
    */

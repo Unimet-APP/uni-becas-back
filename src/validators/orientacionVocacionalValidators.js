@@ -172,6 +172,37 @@ const sesionIdParamICOSchema = Joi.object({
     .messages({ 'string.guid': 'sesionId debe ser UUID válido', 'any.required': 'sesionId es requerido' }),
 });
 
+// Schema para actualizar trayectoria académica (todos los campos opcionales)
+// materias_por_ano_lapso: { "1": { "1": [{ materia, nota }], "2": [...], "3": [...] }, "2": { ... }, ... }
+// materias_por_area: [{ area: "Matemática", materias: [{ nombre, nota }] }, ...]
+const materiaNotaSchema = Joi.object({
+  materia: Joi.string().allow('').optional(),
+  nombre: Joi.string().allow('').optional(),
+  nota: Joi.number().min(0).max(20).optional(),
+}).or('materia', 'nombre');
+
+const actualizarTrayectoriaSchema = Joi.object({
+  promediosPorAno: Joi.object().pattern(Joi.string(), Joi.number().min(0).max(20)).optional(),
+  promedioGeneral: Joi.number().min(0).max(20).optional(),
+  gradoActual: Joi.string().max(50).allow('').optional(),
+  materiasDestacadas: Joi.array().items(Joi.string()).optional(),
+  actividadesExtracurriculares: Joi.array().items(Joi.string()).optional(),
+  proyectosRealizados: Joi.array().items(Joi.string()).optional(),
+  materiasPorAnoLapso: Joi.object().pattern(
+    Joi.string(), // año "1".."5"
+    Joi.object().pattern(
+      Joi.string(), // lapso "1","2","3" o "anual"
+      Joi.array().items(materiaNotaSchema)
+    )
+  ).optional(),
+  materiasPorArea: Joi.array().items(
+    Joi.object({
+      area: Joi.string().required(),
+      materias: Joi.array().items(materiaNotaSchema).optional().default([]),
+    })
+  ).optional(),
+}).min(1).messages({ 'object.min': 'Debe enviar al menos un campo para actualizar' });
+
 module.exports = {
   validateIniciarTest: validate(iniciarTestSchema),
   validateGuardarRespuestasRonda1: validate(guardarRespuestasRonda1Schema),
@@ -180,4 +211,5 @@ module.exports = {
   validateAnalizarCambioCarrera: validate(analizarCambioCarreraSchema),
   validateGuardarRespuestasICO: validate(guardarRespuestasICOSchema),
   validateSesionIdParamICO: validate(sesionIdParamICOSchema, 'params'),
+  validateActualizarTrayectoria: validate(actualizarTrayectoriaSchema),
 };

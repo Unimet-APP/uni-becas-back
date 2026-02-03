@@ -167,15 +167,18 @@ class TrayectoriaAcademicaService {
         trayectoria = await this.crearDesdeUsuario(usuarioId);
       }
 
-      // Actualizar campos
-      await trayectoria.update({
-        promedios_por_ano: datos.promediosPorAno || trayectoria.promedios_por_ano,
-        promedio_general_acumulado: datos.promedioGeneral || trayectoria.promedio_general_acumulado,
-        grado_actual: datos.gradoActual || trayectoria.grado_actual,
-        materias_destacadas: datos.materiasDestacadas || trayectoria.materias_destacadas,
-        actividades_extracurriculares: datos.actividadesExtracurriculares || trayectoria.actividades_extracurriculares,
-        proyectos_realizados: datos.proyectosRealizados || trayectoria.proyectos_realizados,
-      });
+      // Actualizar campos (incluye materias y notas por año/lapso y por área)
+      const updatePayload = {
+        promedios_por_ano: datos.promediosPorAno !== undefined ? datos.promediosPorAno : trayectoria.promedios_por_ano,
+        promedio_general_acumulado: datos.promedioGeneral !== undefined ? datos.promedioGeneral : trayectoria.promedio_general_acumulado,
+        grado_actual: datos.gradoActual !== undefined ? datos.gradoActual : trayectoria.grado_actual,
+        materias_destacadas: datos.materiasDestacadas !== undefined ? datos.materiasDestacadas : trayectoria.materias_destacadas,
+        actividades_extracurriculares: datos.actividadesExtracurriculares !== undefined ? datos.actividadesExtracurriculares : trayectoria.actividades_extracurriculares,
+        proyectos_realizados: datos.proyectosRealizados !== undefined ? datos.proyectosRealizados : trayectoria.proyectos_realizados,
+      };
+      if (datos.materiasPorAnoLapso !== undefined) updatePayload.materias_por_ano_lapso = datos.materiasPorAnoLapso;
+      if (datos.materiasPorArea !== undefined) updatePayload.materias_por_area = datos.materiasPorArea;
+      await trayectoria.update(updatePayload);
 
       return trayectoria;
     } catch (error) {

@@ -12,12 +12,31 @@ const { Op } = require('sequelize');
 class TestOrientacionService {
   
   /**
-   * Crea una nueva sesión de test
+   * Crea una nueva sesión de test.
+   * Solo puede haber un Holland y un ICO por usuario: si ya tiene resultado de ese tipo, no se crea sesión.
    */
   async crearSesion(usuario_id, tipoTest) {
     try {
+      let yaTieneResultado = false;
+      try {
+        const existente = await ResultadosOrientacion.findOne({
+          where: { usuario_id, tipo_test: tipoTest },
+        });
+        yaTieneResultado = !!existente;
+      } catch (errConsulta) {
+        // Si falla la consulta (tabla/BD), no bloquear: permitir crear sesión
+        console.warn('[TestOrientacionService.crearSesion] No se pudo verificar resultado previo:', errConsulta?.message || errConsulta);
+      }
+      if (yaTieneResultado) {
+        throw new ApiError(
+          403,
+          tipoTest === 'ICO'
+            ? 'Ya completaste el test ICO. Solo puedes realizar un test ICO.'
+            : 'Ya completaste el test Holland. Solo puedes realizar un test Holland.'
+        );
+      }
+
       const seed = `${Date.now()}-${Math.random()}`;
-      
       const sesion = await SesionesTestOrientacion.create({
         usuario_id: usuario_id,
         tipo_test: tipoTest,

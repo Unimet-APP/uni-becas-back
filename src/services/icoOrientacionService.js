@@ -68,8 +68,23 @@ function parsearRespuestaLLMICO(texto) {
 class IcoOrientacionService {
   /**
    * Inicia una sesión del test ICO para un usuario.
+   * Solo puede haber un ICO por usuario: si ya tiene resultado ICO, no se crea sesión.
    */
   async iniciarTestIco(usuarioId) {
+    let yaTieneResultadoIco = false;
+    try {
+      const existente = await ResultadosOrientacion.findOne({
+        where: { usuario_id: usuarioId, tipo_test: TIPO_TEST_ICO },
+      });
+      yaTieneResultadoIco = !!existente;
+    } catch (errConsulta) {
+      // Si falla la consulta (tabla/BD), no bloquear: permitir crear sesión
+      console.warn('[ICO.iniciarTestIco] No se pudo verificar resultado previo:', errConsulta?.message || errConsulta);
+    }
+    if (yaTieneResultadoIco) {
+      throw new ApiError(403, 'Ya completaste el test ICO. Solo puedes realizar un test ICO.');
+    }
+
     const sesion = await SesionesTestOrientacion.create({
       usuario_id: usuarioId,
       tipo_test: TIPO_TEST_ICO,
@@ -162,6 +177,8 @@ class IcoOrientacionService {
           actividades_extracurriculares: trayectoria.actividades_extracurriculares || [],
           proyectos_realizados: trayectoria.proyectos_realizados || [],
           promedios_por_ano: trayectoria.promedios_por_ano || {},
+          materias_por_ano_lapso: trayectoria.materias_por_ano_lapso || {},
+          materias_por_area: trayectoria.materias_por_area || [],
         };
       }
     } catch (err) {

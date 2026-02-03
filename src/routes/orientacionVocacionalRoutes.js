@@ -10,6 +10,7 @@ const {
   validateAnalizarCambioCarrera,
   validateGuardarRespuestasICO,
   validateSesionIdParamICO,
+  validateActualizarTrayectoria,
 } = require('../validators/orientacionVocacionalValidators');
 
 /**
@@ -277,6 +278,19 @@ router.get(
  *       401:
  *         description: No autenticado
  */
+// Trayectoria académica (bachillerato): materias y notas por año/lapso y por área
+router.get(
+  '/trayectoria-academica',
+  authenticate,
+  orientacionVocacionalController.obtenerTrayectoriaAcademica
+);
+router.put(
+  '/trayectoria-academica',
+  authenticate,
+  validateActualizarTrayectoria,
+  orientacionVocacionalController.actualizarTrayectoriaAcademica
+);
+
 router.get(
   '/mi-perfil-vocacional',
   authenticate,

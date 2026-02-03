@@ -51,6 +51,18 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         defaultValue: [],
       },
+      materias_por_ano_lapso: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: {},
+        comment: 'Materias y notas por año (1-5) y lapso (1,2,3). Año -> Lapso -> [{ materia, nota }]',
+      },
+      materias_por_area: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: [],
+        comment: 'Materias y notas por área de formación (graduados). [{ area, materias: [{ nombre, nota }] }]',
+      },
       es_actual: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
