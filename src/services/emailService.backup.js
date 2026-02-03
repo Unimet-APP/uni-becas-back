@@ -3,25 +3,15 @@ const nodemailer = require('nodemailer');
 class EmailService {
   constructor() {
     // Configurar el transportador de Nodemailer
-    // Si EMAIL_SERVICE está definido, usar servicio predefinido (, gmail, etc.)
-    const config = process.env.EMAIL_SERVICE ? {
-      service: process.env.EMAIL_SERVICE,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    } : {
+    this.transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.EMAIL_PORT) || 587,
-      secure: process.env.EMAIL_SECURE === 'true',
-      requireTLS: true,
+      secure: process.env.EMAIL_SECURE === 'true', // true para puerto 465, false para otros puertos
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
       }
-    };
-
-    this.transporter = nodemailer.createTransport(config);
+    });
 
     // Verificar configuración del transportador
     this.verifyConnection();
