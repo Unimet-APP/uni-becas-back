@@ -20,6 +20,7 @@ const careersRoutes = require('./careersRoutes');
 const orientacionVocacionalRoutes = require('./orientacionVocacionalRoutes');
 const campanasRoutes = require('./campanasRoutes');
 const notificacionesRoutes = require('./notificacionesRoutes');
+const citasRoutes = require('./citasRoutes');
 const { authenticate } = require('../middleware/auth');
 const campanasController = require('../controllers/campanasController');
 
