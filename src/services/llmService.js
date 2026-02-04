@@ -1,5 +1,7 @@
 // ✅ Importar modelName, generationConfig, safetySettings
 const { genAI, modelName, generationConfig, safetySettings } = require('../config/gemini');
+const grokValidationService = require('./grokValidationService');
+const huggingfaceValidationService = require('./huggingfaceValidationService');
 const ApiError = require('../utils/ApiError');
 
 class LLMService {
@@ -152,14 +154,14 @@ Genera recomendaciones en formato JSON con:
   }
 
   /**
-   * Genera recomendaciones para el test ICO usando puntuaciones RIASEC y especificaciones UNIMET.
-   * No modifica el flujo Holland RIASEC existente.
+   * Construye el prompt usado para recomendaciones ICO (compartido por Gemini y OpenAI).
    * @param {Object} puntuaciones - { Realista, Investigador, Artístico, Social, Emprendedor, Convencional }
    * @param {string} codigoHolland - Ej: "RIA", "SEC"
    * @param {Array} carrerasSpecs - Lista de { name, interestCode, faculty, area }
-   * @returns {Promise<string>} - JSON string con analisis_llm para guardar en resultados_orientacion
+   * @param {Object|null} trayectoria - Trayectoria escolar opcional
+   * @returns {string} - Prompt completo
    */
-  async generarRecomendacionesICO(puntuaciones, codigoHolland, carrerasSpecs, trayectoria = null) {
+  construirPromptICO(puntuaciones, codigoHolland, carrerasSpecs, trayectoria = null) {
     const carrerasTexto = carrerasSpecs.map((c, i) =>
       `${i + 1}. ${c.name} (Interest code: ${c.interestCode || 'N/A'}, Facultad: ${c.faculty || 'N/A'}, Área: ${c.area || 'N/A'})`
     ).join('\n');
@@ -173,7 +175,7 @@ ${JSON.stringify(trayectoria, null, 2)}
 Considera esta trayectoria al redactar el perfil vocacional, las razones de cada carrera y las sugerencias de acompañamiento (por ejemplo: materias en las que destaca, grado actual, actividades o proyectos).`
       : '';
 
-    const prompt = `Eres un orientador vocacional experto. Un usuario completó el test ICO (Inventario de Orientación) y obtuvo las siguientes puntuaciones por dimensión RIASEC (0-100):
+    return `Eres un orientador vocacional experto. Un usuario completó el test ICO (Inventario de Orientación) y obtuvo las siguientes puntuaciones por dimensión RIASEC (0-100):
 
 PUNTUACIONES:
 - Realista: ${puntuaciones.Realista ?? 0}
@@ -201,8 +203,104 @@ INSTRUCCIONES:
   ],
   "sugerenciasAcompanamiento": ["sugerencia1", "sugerencia2"]
 }`;
+  }
 
+  /**
+   * Genera recomendaciones para el test ICO usando puntuaciones RIASEC y especificaciones UNIMET.
+   * Solo usa Gemini (comportamiento original).
+   * @param {Object} puntuaciones - { Realista, Investigador, Artístico, Social, Emprendedor, Convencional }
+   * @param {string} codigoHolland - Ej: "RIA", "SEC"
+   * @param {Array} carrerasSpecs - Lista de { name, interestCode, faculty, area }
+   * @param {Object|null} trayectoria - Trayectoria escolar opcional
+   * @returns {Promise<string>} - JSON string con analisis_llm para guardar en resultados_orientacion
+   */
+  async generarRecomendacionesICO(puntuaciones, codigoHolland, carrerasSpecs, trayectoria = null) {
+    const prompt = this.construirPromptICO(puntuaciones, codigoHolland, carrerasSpecs, trayectoria);
     return await this.generarRespuestaJSON(prompt);
+  }
+
+  /**
+   * Igual que generarRecomendacionesICO pero además llama a un segundo modelo con el mismo prompt
+   * para validación. Si USE_HUGGINGFACE_VALIDATION=true se usa Hugging Face; si no,
+   * si USE_GROK_VALIDATION=true se usa Grok (xAI). La respuesta principal es siempre la de Gemini.
+   * @returns {Promise<{ respuestaGemini: string, respuestaHuggingface?: string, errorHuggingface?: string, respuestaGrok?: string, errorGrok?: string }>}
+   */
+  async generarRecomendacionesICOConValidacion(puntuaciones, codigoHolland, carrerasSpecs, trayectoria = null) {
+    const prompt = this.construirPromptICO(puntuaciones, codigoHolland, carrerasSpecs, trayectoria);
+
+    const respuestaGemini = await this.generarRespuestaJSON(prompt);
+
+    let respuestaGemini2;
+    let respuestaHuggingface;
+    let respuestaHuggingface2;
+    let errorHuggingface;
+    let respuestaGrok;
+    let errorGrok;
+
+    const useAutoconsistencia = process.env.VALIDAR_AUTOCONSISTENCIA_LLM === 'true';
+    const useHuggingface = process.env.USE_HUGGINGFACE_VALIDATION === 'true';
+    const useGrok = process.env.USE_GROK_VALIDATION === 'true';
+
+    if (useAutoconsistencia) {
+      try {
+        console.log('[LLM] Segunda llamada a Gemini (autoconsistencia)...');
+        respuestaGemini2 = await this.generarRespuestaJSON(prompt);
+        console.log('[LLM] Gemini autoconsistencia OK.');
+      } catch (err) {
+        console.warn('[LLM] Segunda llamada Gemini falló:', err?.message);
+      }
+    }
+
+    if (useHuggingface) {
+      console.log('[LLM] Validación ICO: Hugging Face');
+      const tieneToken = !!process.env.HUGGINGFACE_TOKEN?.trim();
+      if (!tieneToken) {
+        console.warn('[LLM] USE_HUGGINGFACE_VALIDATION=true pero HUGGINGFACE_TOKEN no está configurada. No se llama a Hugging Face.');
+        errorHuggingface = 'HUGGINGFACE_TOKEN no configurada en .env';
+      } else {
+        try {
+          console.log('[LLM] Llamando a Hugging Face para validación...');
+          respuestaHuggingface = await huggingfaceValidationService.generarRespuestaJSON(prompt);
+          console.log('[LLM] Hugging Face respondió correctamente.');
+          if (useAutoconsistencia) {
+            console.log('[LLM] Segunda llamada a Hugging Face (autoconsistencia)...');
+            respuestaHuggingface2 = await huggingfaceValidationService.generarRespuestaJSON(prompt);
+            console.log('[LLM] Hugging Face autoconsistencia OK.');
+          }
+        } catch (err) {
+          const msg = err?.message || String(err);
+          console.error('[LLM] Validación Hugging Face falló (se usa solo Gemini):', msg);
+          errorHuggingface = msg;
+        }
+      }
+    } else if (useGrok) {
+      console.log('[LLM] Validación ICO: Grok (xAI)');
+      const tieneApiKey = !!process.env.GROK_API_KEY?.trim();
+      if (!tieneApiKey) {
+        console.warn('[LLM] USE_GROK_VALIDATION=true pero GROK_API_KEY no está configurada. No se llama a Grok.');
+        errorGrok = 'GROK_API_KEY no configurada en .env';
+      } else {
+        try {
+          console.log('[LLM] Llamando a Grok (xAI) para validación...');
+          respuestaGrok = await grokValidationService.generarRespuestaJSON(prompt);
+          console.log('[LLM] Grok respondió correctamente.');
+        } catch (err) {
+          const msg = err?.message || String(err);
+          console.error('[LLM] Validación Grok falló (se usa solo Gemini):', msg);
+          errorGrok = msg;
+        }
+      }
+    }
+
+    return {
+      respuestaGemini,
+      respuestaGemini2,
+      respuestaHuggingface,
+      respuestaHuggingface2,
+      errorHuggingface,
+      respuestaGrok,
+      errorGrok,
+    };
   }
 
   /**

@@ -441,7 +441,7 @@ class OrientacionVocacionalController {
   guardarRespuestasIcoYFinalizar = asyncHandler(async (req, res) => {
     const { sesionId, respuestas } = req.body;
     const payload = await icoOrientacionService.guardarRespuestasIcoYFinalizar(sesionId, respuestas);
-    return sendSuccess(res, {
+    const response = {
       resultadoId: payload.resultado.id,
       puntuaciones: payload.puntuaciones,
       codigoHolland: payload.codigoHolland,
@@ -449,7 +449,22 @@ class OrientacionVocacionalController {
       perfilSecundario: payload.perfil_secundario,
       analisisLlm: payload.analisis_llm,
       recomendacionesCarreras: payload.recomendacionesCarreras || payload.analisis_llm?.carrerasRecomendadas || [],
-    }, 'Test ICO finalizado y resultado generado');
+    };
+    // Validación Hugging Face (cuando USE_HUGGINGFACE_VALIDATION=true)
+    if (payload.validacion_huggingface != null) {
+      response.validacionHuggingface = payload.validacion_huggingface;
+    }
+    if (payload.validacion_huggingface_error != null) {
+      response.validacionHuggingfaceError = payload.validacion_huggingface_error;
+    }
+    // Validación Grok (cuando USE_GROK_VALIDATION=true; para probar más adelante)
+    if (payload.validacion_grok != null) {
+      response.validacionGrok = payload.validacion_grok;
+    }
+    if (payload.validacion_grok_error != null) {
+      response.validacionGrokError = payload.validacion_grok_error;
+    }
+    return sendSuccess(res, response, 'Test ICO finalizado y resultado generado');
   });
 
   /**

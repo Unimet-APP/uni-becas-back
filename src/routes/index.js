@@ -20,7 +20,8 @@ const careersRoutes = require('./careersRoutes');
 const orientacionVocacionalRoutes = require('./orientacionVocacionalRoutes');
 const campanasRoutes = require('./campanasRoutes');
 const notificacionesRoutes = require('./notificacionesRoutes');
-const citasRoutes = require('./citasRoutes');
+const { authenticate } = require('../middleware/auth');
+const campanasController = require('../controllers/campanasController');
 
 const router = express.Router();
 
@@ -58,6 +59,8 @@ router.use('/v1/audit', auditRoutes);
 router.use('/v1/disponibilidad', disponibilidadRoutes);
 router.use('/v1/llm', llmRoutes);
 router.use('/v1/orientacion', orientacionVocacionalRoutes);
+// GET estadísticas de campañas (ruta explícita para evitar 404)
+router.get('/v1/campanas/estadisticas', authenticate, campanasController.obtenerEstadisticas);
 router.use('/v1/campanas', campanasRoutes);
 router.use('/v1/notificaciones', notificacionesRoutes);
 router.use('/v1/citas', citasRoutes);

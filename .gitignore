@@ -65,6 +65,9 @@ jspm_packages/
 ehthumbs.db
 Thumbs.db
 
+# Output (validación LLM, etc.)
+output/
+
 # Uploads
 uploads/*
 !uploads/.gitkeep

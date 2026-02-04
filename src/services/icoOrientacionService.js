@@ -12,6 +12,8 @@ const {
   ResultadosOrientacion,
   PreguntasOrientacion,
 } = require('../models');
+const fs = require('fs');
+const path = require('path');
 const ApiError = require('../utils/ApiError');
 const testOrientacionService = require('./testOrientacionService');
 const llmService = require('./llmService');
@@ -190,9 +192,34 @@ class IcoOrientacionService {
       carrerasRecomendadas: [],
       sugerenciasAcompanamiento: [],
     };
+    let respuestaGemini = null;
+    let validacionHuggingface = null;
+    let validacionHuggingfaceError = null;
+    let validacionGrok = null;
+    let validacionGrokError = null;
+    const useHf = process.env.USE_HUGGINGFACE_VALIDATION === 'true';
+    const useGrok = process.env.USE_GROK_VALIDATION === 'true';
+    const useAutoconsistencia = process.env.VALIDAR_AUTOCONSISTENCIA_LLM === 'true';
+    let validacionGemini2 = null;
+    let validacionHuggingface2 = null;
     try {
-      const respuestaLLM = await llmService.generarRecomendacionesICO(puntuaciones, codigoHolland, CARRERAS_UNIMET, trayectoriaParaLLM);
-      analisisLLM = parsearRespuestaLLMICO(respuestaLLM);
+      if (useHf || useGrok || useAutoconsistencia) {
+        const out = await llmService.generarRecomendacionesICOConValidacion(
+          puntuaciones, codigoHolland, CARRERAS_UNIMET, trayectoriaParaLLM
+        );
+        respuestaGemini = out.respuestaGemini;
+        validacionGemini2 = out.respuestaGemini2 ?? null;
+        validacionHuggingface = out.respuestaHuggingface ?? null;
+        validacionHuggingface2 = out.respuestaHuggingface2 ?? null;
+        validacionHuggingfaceError = out.errorHuggingface ?? null;
+        validacionGrok = out.respuestaGrok ?? null;
+        validacionGrokError = out.errorGrok ?? null;
+      } else {
+        respuestaGemini = await llmService.generarRecomendacionesICO(
+          puntuaciones, codigoHolland, CARRERAS_UNIMET, trayectoriaParaLLM
+        );
+      }
+      analisisLLM = parsearRespuestaLLMICO(respuestaGemini);
       // Enriquecer cada carrera: nombre, name (compat), razon, facultad, area — para que el front muestre título (carrera + facultad) y descripción
       const normalizar = (s) =>
         (s || '')
@@ -240,6 +267,55 @@ class IcoOrientacionService {
 
     await sesion.update({ estado: 'finalizada', fecha_completada: new Date() });
 
+    // Guardar en archivo: respuesta de Gemini + validación (HF/Grok) para verlas en output/validacion-llm-ultimo.json
+    if (respuestaGemini != null) {
+      try {
+        const outputDir = path.join(__dirname, '..', '..', 'output');
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+        }
+        const outputPath = path.join(outputDir, 'validacion-llm-ultimo.json');
+        let geminiParaArchivo = respuestaGemini;
+        let gemini2ParaArchivo = validacionGemini2;
+        let hfParaArchivo = validacionHuggingface;
+        let hf2ParaArchivo = validacionHuggingface2;
+        let grokParaArchivo = validacionGrok;
+        try {
+          if (typeof respuestaGemini === 'string') geminiParaArchivo = JSON.parse(respuestaGemini);
+        } catch (_) {
+          geminiParaArchivo = respuestaGemini;
+        }
+        try {
+          if (typeof validacionGemini2 === 'string') gemini2ParaArchivo = JSON.parse(validacionGemini2);
+        } catch (_) {
+          gemini2ParaArchivo = validacionGemini2;
+        }
+        try {
+          if (typeof validacionHuggingface === 'string') hfParaArchivo = JSON.parse(validacionHuggingface);
+        } catch (_) {}
+        try {
+          if (typeof validacionHuggingface2 === 'string') hf2ParaArchivo = JSON.parse(validacionHuggingface2);
+        } catch (_) {}
+        try {
+          if (typeof validacionGrok === 'string') grokParaArchivo = JSON.parse(validacionGrok);
+        } catch (_) {}
+        const contenido = {
+          timestamp: new Date().toISOString(),
+          respuestaGemini: geminiParaArchivo ?? String(respuestaGemini ?? ''),
+          respuestaGemini2: gemini2ParaArchivo ?? validacionGemini2 ?? null,
+          validacionHuggingface: hfParaArchivo,
+          validacionHuggingface2: hf2ParaArchivo ?? validacionHuggingface2 ?? null,
+          validacionHuggingfaceError: validacionHuggingfaceError,
+          validacionGrok: grokParaArchivo,
+          validacionGrokError: validacionGrokError,
+        };
+        fs.writeFileSync(outputPath, JSON.stringify(contenido, null, 2), 'utf8');
+        console.log('[ICO] Resultado Gemini + validación guardado en:', outputPath);
+      } catch (err) {
+        console.warn('[ICO] No se pudo guardar validacion-llm-ultimo.json:', err?.message);
+      }
+    }
+
     return {
       resultado,
       puntuaciones,
@@ -248,6 +324,12 @@ class IcoOrientacionService {
       perfil_secundario: perfiles.secundario,
       analisis_llm: analisisLLM,
       recomendacionesCarreras: analisisLLM.carrerasRecomendadas || [],
+      // Validación Hugging Face (cuando USE_HUGGINGFACE_VALIDATION=true)
+      validacion_huggingface: validacionHuggingface,
+      validacion_huggingface_error: validacionHuggingfaceError,
+      // Validación Grok (cuando USE_GROK_VALIDATION=true; Grok se deja para probar más adelante)
+      validacion_grok: validacionGrok,
+      validacion_grok_error: validacionGrokError,
     };
   }
 
