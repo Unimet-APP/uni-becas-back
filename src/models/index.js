@@ -47,6 +47,9 @@ db.TrayectoriasEscolares = require('./TrayectoriasEscolares')(sequelize, DataTyp
 // Sistema de Notificaciones
 db.Notificaciones = require('./Notificaciones')(sequelize, DataTypes);
 
+// Sistema de Citas de Orientación
+db.CitasOrientacion = require('./CitasOrientacion')(sequelize, DataTypes);
+
 // Define associations
 Object.keys(db).forEach(modelName => {
   if (db[modelName].associate) {
