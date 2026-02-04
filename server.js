@@ -32,10 +32,12 @@ const startServer = async () => {
           logger.info('ℹ️  Using existing database schema');
         } else {
           logger.info('🔄 Starting database sync (alter mode)...');
-          // Sincronizar todos los modelos
+          // Modelos con ENUM u otras columnas que generan ALTER ... USING inválido en PostgreSQL: sync sin alter
+          const skipAlterModels = ['RespuestasTestOrientacion', 'Notificaciones'];
           for (const modelName in sequelize.models) {
             try {
-              await sequelize.models[modelName].sync({ alter: true });
+              const alter = skipAlterModels.includes(modelName) ? false : true;
+              await sequelize.models[modelName].sync({ alter });
             } catch (modelSyncError) {
               logger.warn(`⚠️  Failed to sync ${modelName}: ${modelSyncError.message}`);
             }

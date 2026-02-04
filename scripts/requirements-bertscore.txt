@@ -1,0 +1,3 @@
+# Dependencias para el script de BERTScore (scripts/bertscore_validacion.py)
+# Instalar: pip install -r scripts/requirements-bertscore.txt
+bert-score>=0.3.13

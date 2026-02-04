@@ -224,11 +224,13 @@ router.get(
  *     security:
  *       - bearerAuth: []
  *     responses:
-// Rutas de administración**/
+ *       200:
+ *         description: Historial obtenido exitosamente
+ *       401:
+ *         description: No autenticado
+ */
 router.get(
-  '/historial-especialista', 
-  //authenticate, 
- // roleMiddleware(['especialista', 'admin']), // Middleware que verifique el rol
+  '/historial-especialista',
   orientacionVocacionalController.obtenerHistorialEspecialista
 );
 
