@@ -169,7 +169,9 @@ const REGEX_VENEZOLANOS = {
   // EMAIL_UNIMET: Permite subdominios (ej: estudiantes.unimet.edu.ve, correo.unimet.edu.ve)
   EMAIL_UNIMET: /^[a-zA-Z0-9._%+-]+@([a-zA-Z0-9-]+\.)*unimet\.edu\.ve$/,
   // EMAIL especifico para personal/profesores : @unimet.edu.ve
-  EMAIL_PERSONAL_UNIMET: /^[a-zA-Z0-9._%+-]+@unimet\.edu\.ve$/
+  EMAIL_PERSONAL_UNIMET: /^[a-zA-Z0-9._%+-]+@unimet\.edu\.ve$/,
+  // EMAIL especifico para estudiantes: @correo.unimet.edu.ve (convertir aspirante → estudiante)
+  EMAIL_ESTUDIANTE_UNIMET: /^[a-zA-Z0-9._%+-]+@correo\.unimet\.edu\.ve$/
 };
 
 // Mensajes de error comunes
