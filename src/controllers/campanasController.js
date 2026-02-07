@@ -88,39 +88,59 @@ class CampanasController {
     // Convertir a array y aplicar filtros
     let estudiantesFiltrados = Object.values(agrupadoPorUsuario);
 
-    // Filtro por grupo predefinido
+    // Carreras por facultad UNIMET
+    const carrerasFacultades = {
+      facultad_ingenieria: ['ingeniería civil', 'ingeniería mecánica', 'ingeniería producción', 'ingeniería química', 'ingeniería de sistemas', 'ingeniería eléctrica', 'ingeniería', 'sistemas', 'computación'],
+      facultad_ciencias_economicas: ['ciencias administrativas', 'administración', 'economía empresarial', 'economía', 'contaduría pública', 'contaduría', 'negocios', 'finanzas'],
+      facultad_ciencias: ['psicología', 'matemáticas industriales', 'matemáticas', 'ciencias'],
+      facultad_humanidades: ['educación', 'idiomas modernos', 'idiomas', 'comunicación social', 'comunicación', 'turismo sostenible', 'turismo', 'periodismo'],
+      facultad_estudios_juridicos: ['derecho', 'estudios liberales', 'estudios internacionales', 'relaciones internacionales', 'ciencias políticas', 'leyes']
+    };
+
+    // Filtro por facultad predefinida
+    if (grupo && carrerasFacultades[grupo]) {
+      const carrerasFacultad = carrerasFacultades[grupo];
+      estudiantesFiltrados = estudiantesFiltrados.filter(est => {
+        const carreras = est.recomendacionesCarreras.map(c => c.name?.toLowerCase() || '').join(' ');
+        return carrerasFacultad.some(carrera => carreras.includes(carrera));
+      });
+    }
+
+    // Compatibilidad con grupos antiguos (por si acaso)
     if (grupo === 'ingenieria') {
       estudiantesFiltrados = estudiantesFiltrados.filter(est => {
-        const perfil = est.perfilDominante?.toLowerCase() || '';
         const carreras = est.recomendacionesCarreras.map(c => c.name?.toLowerCase() || '').join(' ');
-        return perfil.includes('lógico') || perfil.includes('investigador') ||
-               carreras.includes('ingeniería') || carreras.includes('sistemas') ||
-               carreras.includes('computación');
+        return carreras.includes('ingeniería') || carreras.includes('sistemas') || carreras.includes('computación');
       });
     } else if (grupo === 'artes') {
       estudiantesFiltrados = estudiantesFiltrados.filter(est => {
-        const perfil = est.perfilDominante?.toLowerCase() || '';
         const carreras = est.recomendacionesCarreras.map(c => c.name?.toLowerCase() || '').join(' ');
-        return perfil.includes('creativo') || perfil.includes('artístico') ||
-               carreras.includes('diseño') || carreras.includes('arquitectura') ||
-               carreras.includes('arte');
+        return carreras.includes('diseño') || carreras.includes('arquitectura') || carreras.includes('arte');
       });
     } else if (grupo === 'ciencias_sociales') {
       estudiantesFiltrados = estudiantesFiltrados.filter(est => {
-        const perfil = est.perfilDominante?.toLowerCase() || '';
         const carreras = est.recomendacionesCarreras.map(c => c.name?.toLowerCase() || '').join(' ');
-        return perfil.includes('social') || perfil.includes('humanista') ||
-               carreras.includes('psicología') || carreras.includes('derecho') ||
-               carreras.includes('educación') || carreras.includes('comunicación');
+        return carreras.includes('psicología') || carreras.includes('derecho') || carreras.includes('educación') || carreras.includes('comunicación');
       });
     }
 
     // Filtro por carrera de interés
     if (carreraInteres && carreraInteres !== 'todas') {
+      // Función para normalizar texto (quitar acentos y convertir a minúsculas)
+      const normalizar = (texto) => texto
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, ''); // Quitar acentos
+
+      // Convertir valor del select (ej: "ingenieria_sistemas") a términos de búsqueda
+      const terminosBusqueda = normalizar(carreraInteres).replace(/_/g, ' ').split(' ');
+
       estudiantesFiltrados = estudiantesFiltrados.filter(est =>
-        est.recomendacionesCarreras.some(c =>
-          c.name?.toLowerCase().includes(carreraInteres.toLowerCase())
-        )
+        est.recomendacionesCarreras.some(c => {
+          const nombreCarreraNorm = normalizar(c.name || '');
+          // Buscar si todos los términos están presentes en el nombre de la carrera
+          return terminosBusqueda.every(termino => nombreCarreraNorm.includes(termino));
+        })
       );
     }
 
@@ -280,11 +300,11 @@ class CampanasController {
 
   /**
    * POST /api/v1/campanas/enviar-grupo-predefinido
-   * Envía campaña a un grupo predefinido (ingeniería, artes, ciencias sociales)
+   * Envía campaña a un grupo predefinido por facultad UNIMET
    */
   enviarGrupoPredefinido = asyncHandler(async (req, res) => {
     const {
-      grupo, // 'ingenieria', 'artes', 'ciencias_sociales'
+      grupo, // 'facultad_ingenieria', 'facultad_ciencias_economicas', 'facultad_ciencias', 'facultad_humanidades', 'facultad_estudios_juridicos'
       asunto,
       contenido,
       titulo,
@@ -419,22 +439,26 @@ class CampanasController {
    * Obtiene estadísticas de los grupos predefinidos
    */
   obtenerEstadisticas = asyncHandler(async (req, res) => {
-    console.log('📊 Obteniendo estadísticas de campañas...');
+    console.log('📊 Obteniendo estadísticas de campañas por facultad...');
 
-    // Usar la misma lógica de segmentación para mantener consistencia
-    const ingenieriaResult = await this._segmentarEstudiantesLogica({ grupo: 'ingenieria' });
-    const artesResult = await this._segmentarEstudiantesLogica({ grupo: 'artes' });
-    const cienciasSocialesResult = await this._segmentarEstudiantesLogica({ grupo: 'ciencias_sociales' });
+    // Segmentar por las 5 facultades de la UNIMET
+    const facultadIngenieriaResult = await this._segmentarEstudiantesLogica({ grupo: 'facultad_ingenieria' });
+    const facultadCienciasEconomicasResult = await this._segmentarEstudiantesLogica({ grupo: 'facultad_ciencias_economicas' });
+    const facultadCienciasResult = await this._segmentarEstudiantesLogica({ grupo: 'facultad_ciencias' });
+    const facultadHumanidadesResult = await this._segmentarEstudiantesLogica({ grupo: 'facultad_humanidades' });
+    const facultadEstudiosJuridicosResult = await this._segmentarEstudiantesLogica({ grupo: 'facultad_estudios_juridicos' });
 
     const stats = {
-      ingenieria: ingenieriaResult.total,
-      artes: artesResult.total,
-      cienciasSociales: cienciasSocialesResult.total,
-      otros: 0, // Calculado como diferencia
+      facultadIngenieria: facultadIngenieriaResult.total,
+      facultadCienciasEconomicas: facultadCienciasEconomicasResult.total,
+      facultadCiencias: facultadCienciasResult.total,
+      facultadHumanidades: facultadHumanidadesResult.total,
+      facultadEstudiosJuridicos: facultadEstudiosJuridicosResult.total,
+      otros: 0,
       total: 0
     };
 
-    // Calcular total y otros
+    // Calcular total
     const historial = await testOrientacionService.obtenerTodosLosTests();
     const usuariosUnicos = new Set();
     historial.forEach(sesion => {
@@ -442,9 +466,11 @@ class CampanasController {
     });
 
     stats.total = usuariosUnicos.size;
-    stats.otros = stats.total - (stats.ingenieria + stats.artes + stats.cienciasSociales);
+    const sumaFacultades = stats.facultadIngenieria + stats.facultadCienciasEconomicas +
+                          stats.facultadCiencias + stats.facultadHumanidades + stats.facultadEstudiosJuridicos;
+    stats.otros = Math.max(0, stats.total - sumaFacultades);
 
-    console.log('📊 Estadísticas calculadas:', stats);
+    console.log('📊 Estadísticas por facultad calculadas:', stats);
 
     return sendSuccess(res, stats, 'Estadísticas obtenidas exitosamente');
   });
