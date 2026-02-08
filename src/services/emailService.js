@@ -134,9 +134,9 @@ class EmailService {
     const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || `Sistema de Becas UNIMET <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_FROM || `Portal Estudiantil UNIMET <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: '¡Bienvenido! - Sistema de Becas UNIMET',
+      subject: '¡Bienvenido al Portal Estudiantil UNIMET!',
       html: this.getStudentWelcomeTemplate(nombre, loginUrl)
     };
 
@@ -776,7 +776,7 @@ class EmailService {
       <div class="email-wrapper">
         <div class="container">
           <div class="header">
-            <h1>¡Bienvenido al Sistema de Becas!</h1>
+            <h1>¡Bienvenido al Portal Estudiantil!</h1>
             <p>Universidad Metropolitana</p>
           </div>
 
@@ -791,9 +791,9 @@ class EmailService {
           <div class="content">
             <p>Hola <strong>${nombre}</strong>,</p>
 
-            <p>¡Felicitaciones! Tu cuenta de estudiante ha sido creada exitosamente en el Sistema de Gestión de Becas de la Universidad Metropolitana.</p>
+            <p>Tu cuenta ha sido creada exitosamente en el Portal Estudiantil de la Universidad Metropolitana. Ya puedes acceder a todos los servicios disponibles para ti.</p>
 
-            <p><strong>¡Ya puedes comenzar a usar el sistema!</strong> Tu cuenta ha sido verificada automáticamente y está lista para que inicies sesión.</p>
+            <p><strong>¡Tu cuenta está activa y lista para usar!</strong></p>
           </div>
 
           <div class="info-box">
@@ -806,34 +806,26 @@ class EmailService {
           </div>
 
           <div class="next-steps">
-            <h3>🚀 Próximos Pasos</h3>
+            <h3>🚀 ¿Qué puedes hacer?</h3>
             <ul>
-              <li><strong>Inicia sesión</strong> con tu email y la contraseña que estableciste al registrarte</li>
-              <li><strong>Explora el sistema</strong> y conoce las becas disponibles</li>
-              <li><strong>Completa tu perfil</strong> con toda la información requerida</li>
-              <li><strong>Postula a las becas</strong> para las que seas elegible</li>
+              <li>🎓 <strong>Orientación vocacional</strong> — realiza tests y recibe recomendaciones de carrera</li>
+              <li>📅 <strong>Citas con especialistas</strong> — agenda sesiones de orientación personalizadas</li>
+              <li>💼 <strong>Becas y ayudas</strong> — consulta y postula a las opciones disponibles</li>
+              <li>👤 <strong>Tu perfil</strong> — mantén tu información académica al día</li>
             </ul>
           </div>
 
           <div class="button-container">
-            <a href="${loginUrl}" class="login-button">Iniciar Sesión Ahora</a>
+            <a href="${loginUrl}" class="login-button">Ingresar al Portal</a>
           </div>
 
-          <p style="margin-top: 30px;">Ahora puedes:</p>
-          <ul>
-            <li>✅ Gestionar tus postulaciones de becas</li>
-            <li>✅ Ver el estado de tus solicitudes</li>
-            <li>✅ Actualizar tu información personal</li>
-            <li>✅ Consultar las becas disponibles</li>
-          </ul>
-
-          <p style="margin-top: 30px; font-size: 14px; color: #666;">Si tienes alguna pregunta o necesitas ayuda, no dudes en contactarnos:</p>
+          <p style="margin-top: 30px; font-size: 14px; color: #666;">Si tienes alguna pregunta o necesitas ayuda, contáctanos:</p>
           <p style="text-align: center; margin: 10px 0;"><strong>${supportEmail}</strong></p>
         </div>
 
         <div class="footer">
           <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
-          <p>Sistema de Gestión de Becas - Universidad Metropolitana</p>
+          <p>Portal Estudiantil — Universidad Metropolitana</p>
           <p>© ${new Date().getFullYear()} UNIMET. Todos los derechos reservados.</p>
         </div>
       </div>
