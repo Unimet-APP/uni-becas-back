@@ -1781,7 +1781,7 @@ class EmailService {
     const cancelarUrl = `${baseUrl}/cita/cancelar/${citaId}?token=${tokenConfirmacion}`;
 
     // Formatear fecha para mostrar
-    const fechaFormateada = new Date(fecha).toLocaleDateString('es-VE', {
+    const fechaFormateada = new Date(fecha + 'T00:00:00').toLocaleDateString('es-VE', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
