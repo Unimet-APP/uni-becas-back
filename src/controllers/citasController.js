@@ -3,8 +3,17 @@ const { sendSuccess } = require('../config/responses');
 const ApiError = require('../utils/ApiError');
 const { CitasOrientacion, Usuario } = require('../models');
 const { Op } = require('sequelize');
+const crypto = require('crypto');
+const emailService = require('../services/emailService');
 
 class CitasController {
+
+  /**
+   * Genera un token único para confirmación de citas
+   */
+  generarTokenConfirmacion() {
+    return crypto.randomBytes(32).toString('hex');
+  }
 
   /**
    * POST /api/v1/citas/agendar
@@ -22,6 +31,12 @@ class CitasController {
       throw new ApiError(404, 'El estudiante no existe');
     }
 
+    // Obtener información del especialista
+    const especialista = await Usuario.findByPk(especialistaId);
+
+    // Generar token de confirmación
+    const tokenConfirmacion = this.generarTokenConfirmacion();
+
     // Crear la cita
     const cita = await CitasOrientacion.create({
       estudiante_id,
@@ -31,7 +46,8 @@ class CitasController {
       modalidad: modalidad || 'presencial',
       motivo,
       notas,
-      estado: 'pendiente'
+      estado: 'pendiente',
+      token_confirmacion: tokenConfirmacion
     });
 
     // Obtener la cita con la información del estudiante
@@ -49,6 +65,25 @@ class CitasController {
         }
       ]
     });
+
+    // Enviar email de notificación al estudiante
+    try {
+      await emailService.sendCitaAgendadaEmail({
+        email: estudiante.email,
+        nombreEstudiante: `${estudiante.nombre} ${estudiante.apellido || ''}`.trim(),
+        nombreEspecialista: `${especialista.nombre} ${especialista.apellido || ''}`.trim(),
+        fecha,
+        hora,
+        modalidad: modalidad || 'presencial',
+        motivo,
+        citaId: cita.id,
+        tokenConfirmacion
+      });
+      console.log(`📧 Email de cita enviado a ${estudiante.email}`);
+    } catch (emailError) {
+      console.error('Error al enviar email de cita:', emailError);
+      // No bloquear la creación de la cita si falla el email
+    }
 
     return sendSuccess(res, citaCompleta, 'Cita agendada exitosamente', 201);
   });
@@ -222,6 +257,112 @@ class CitasController {
     });
 
     return sendSuccess(res, cita, 'Cita cancelada exitosamente');
+  });
+
+  /**
+   * GET /api/v1/citas/confirmar/:citaId
+   * Confirma una cita usando el token (ruta pública)
+   */
+  confirmarCitaPorToken = asyncHandler(async (req, res) => {
+    const { citaId } = req.params;
+    const { token } = req.query;
+
+    if (!token) {
+      throw new ApiError(400, 'Token de confirmación requerido');
+    }
+
+    const cita = await CitasOrientacion.findOne({
+      where: {
+        id: citaId,
+        token_confirmacion: token
+      },
+      include: [
+        {
+          model: Usuario,
+          as: 'estudiante',
+          attributes: ['id', 'nombre', 'apellido', 'email']
+        },
+        {
+          model: Usuario,
+          as: 'especialista',
+          attributes: ['id', 'nombre', 'apellido', 'email']
+        }
+      ]
+    });
+
+    if (!cita) {
+      throw new ApiError(404, 'Cita no encontrada o token inválido');
+    }
+
+    if (cita.estado === 'cancelada') {
+      throw new ApiError(400, 'Esta cita ya fue cancelada');
+    }
+
+    if (cita.estado === 'completada') {
+      throw new ApiError(400, 'Esta cita ya fue completada');
+    }
+
+    if (cita.estado === 'confirmada') {
+      return sendSuccess(res, cita, 'Esta cita ya está confirmada');
+    }
+
+    await cita.update({ estado: 'confirmada' });
+
+    return sendSuccess(res, {
+      ...cita.toJSON(),
+      estado: 'confirmada'
+    }, '¡Cita confirmada exitosamente! Te esperamos en la fecha y hora indicadas.');
+  });
+
+  /**
+   * GET /api/v1/citas/cancelar-por-token/:citaId
+   * Cancela una cita usando el token (ruta pública)
+   */
+  cancelarCitaPorToken = asyncHandler(async (req, res) => {
+    const { citaId } = req.params;
+    const { token } = req.query;
+
+    if (!token) {
+      throw new ApiError(400, 'Token de confirmación requerido');
+    }
+
+    const cita = await CitasOrientacion.findOne({
+      where: {
+        id: citaId,
+        token_confirmacion: token
+      },
+      include: [
+        {
+          model: Usuario,
+          as: 'estudiante',
+          attributes: ['id', 'nombre', 'apellido', 'email']
+        },
+        {
+          model: Usuario,
+          as: 'especialista',
+          attributes: ['id', 'nombre', 'apellido', 'email']
+        }
+      ]
+    });
+
+    if (!cita) {
+      throw new ApiError(404, 'Cita no encontrada o token inválido');
+    }
+
+    if (cita.estado === 'cancelada') {
+      return sendSuccess(res, cita, 'Esta cita ya está cancelada');
+    }
+
+    if (cita.estado === 'completada') {
+      throw new ApiError(400, 'No se puede cancelar una cita ya completada');
+    }
+
+    await cita.update({ estado: 'cancelada' });
+
+    return sendSuccess(res, {
+      ...cita.toJSON(),
+      estado: 'cancelada'
+    }, 'Cita cancelada exitosamente. El especialista será notificado.');
   });
 
 }

@@ -59,6 +59,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: 'Notas de seguimiento después de la cita'
+    },
+    token_confirmacion: {
+      type: DataTypes.STRING(64),
+      allowNull: true,
+      unique: true,
+      comment: 'Token único para confirmar/cancelar la cita sin autenticación'
     }
   }, {
     tableName: 'citas_orientacion',

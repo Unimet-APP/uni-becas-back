@@ -74,6 +74,75 @@ router.post(
   citasController.agendarCita
 );
 
+// ==================== RUTAS PÚBLICAS (sin autenticación) ====================
+// IMPORTANTE: Estas rutas deben ir ANTES de las rutas con :citaId
+
+/**
+ * @swagger
+ * /api/v1/citas/confirmar/{citaId}:
+ *   get:
+ *     summary: Confirma una cita usando el token (ruta pública)
+ *     tags: [Citas de Orientación]
+ *     parameters:
+ *       - in: path
+ *         name: citaId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Token de confirmación enviado por email
+ *     responses:
+ *       200:
+ *         description: Cita confirmada exitosamente
+ *       400:
+ *         description: Token inválido o cita ya procesada
+ *       404:
+ *         description: Cita no encontrada
+ */
+router.get(
+  '/confirmar/:citaId',
+  citasController.confirmarCitaPorToken
+);
+
+/**
+ * @swagger
+ * /api/v1/citas/cancelar-por-token/{citaId}:
+ *   get:
+ *     summary: Cancela una cita usando el token (ruta pública)
+ *     tags: [Citas de Orientación]
+ *     parameters:
+ *       - in: path
+ *         name: citaId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Token de confirmación enviado por email
+ *     responses:
+ *       200:
+ *         description: Cita cancelada exitosamente
+ *       400:
+ *         description: Token inválido o cita ya procesada
+ *       404:
+ *         description: Cita no encontrada
+ */
+router.get(
+  '/cancelar-por-token/:citaId',
+  citasController.cancelarCitaPorToken
+);
+
+// ==================== RUTAS PROTEGIDAS ====================
+
 /**
  * @swagger
  * /api/v1/citas/mis-citas:

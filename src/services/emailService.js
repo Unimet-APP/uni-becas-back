@@ -1,5 +1,17 @@
 const nodemailer = require('nodemailer');
 
+const MOTIVOS_LEGIBLES = {
+  orientacion_vocacional: 'Orientación Vocacional',
+  revision_resultados: 'Revisión de Resultados de Test',
+  opciones_beca: 'Información sobre Becas',
+  plan_estudios: 'Plan de Estudios',
+  seguimiento: 'Seguimiento General',
+  otro: 'Otro'
+};
+
+const formatearMotivo = (motivo) =>
+  MOTIVOS_LEGIBLES[motivo] || motivo.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
 class EmailService {
   constructor() {
     // Configurar el transportador de Nodemailer
@@ -1738,6 +1750,294 @@ class EmailService {
         <div class="footer">
           <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
           <p>Sistema de Gestión de Becas - Universidad Metropolitana</p>
+          <p>© ${new Date().getFullYear()} UNIMET. Todos los derechos reservados.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+  }
+
+  /**
+   * Enviar email de notificación de cita agendada al estudiante
+   * @param {Object} params - Parámetros del correo
+   * @param {string} params.email - Email del estudiante
+   * @param {string} params.nombreEstudiante - Nombre del estudiante
+   * @param {string} params.nombreEspecialista - Nombre del especialista
+   * @param {string} params.fecha - Fecha de la cita (YYYY-MM-DD)
+   * @param {string} params.hora - Hora de la cita (HH:MM)
+   * @param {string} params.modalidad - Modalidad de la cita
+   * @param {string} params.motivo - Motivo de la cita
+   * @param {string} params.citaId - ID de la cita
+   * @param {string} params.tokenConfirmacion - Token para confirmar/cancelar
+   */
+  async sendCitaAgendadaEmail(params) {
+    const {
+      email,
+      nombreEstudiante,
+      nombreEspecialista,
+      fecha,
+      hora,
+      modalidad,
+      motivo,
+      citaId,
+      tokenConfirmacion
+    } = params;
+
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const confirmarUrl = `${baseUrl}/cita/confirmar/${citaId}?token=${tokenConfirmacion}`;
+    const cancelarUrl = `${baseUrl}/cita/cancelar/${citaId}?token=${tokenConfirmacion}`;
+
+    // Formatear fecha para mostrar
+    const fechaFormateada = new Date(fecha).toLocaleDateString('es-VE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    const modalidadTexto = {
+      'presencial': '📍 Presencial - Oficina de Orientación Vocacional',
+      'virtual': '💻 Virtual - Se enviará enlace de videollamada',
+      'telefonica': '📞 Telefónica - Te contactaremos al número registrado'
+    };
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || `Sistema de Becas UNIMET <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: '📅 Nueva Cita de Orientación Vocacional - UNIMET',
+      html: this.getCitaAgendadaTemplate({
+        nombreEstudiante,
+        nombreEspecialista,
+        fechaFormateada,
+        hora,
+        modalidad,
+        modalidadTexto: modalidadTexto[modalidad] || modalidad,
+        motivo,
+        confirmarUrl,
+        cancelarUrl
+      })
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`📧 Email de cita agendada enviado a ${email}`, { messageId: info.messageId });
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error(`Error al enviar email de cita a ${email}:`, error);
+      // No lanzar error para no bloquear la creación de la cita
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Template HTML para email de cita agendada
+   */
+  getCitaAgendadaTemplate(params) {
+    const {
+      nombreEstudiante,
+      nombreEspecialista,
+      fechaFormateada,
+      hora,
+      modalidad,
+      modalidadTexto,
+      motivo,
+      confirmarUrl,
+      cancelarUrl
+    } = params;
+
+    return `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Cita de Orientación Vocacional</title>
+      <style>
+        body {
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+          background-color: #f4f4f4;
+        }
+        .container {
+          background-color: #ffffff;
+          border-radius: 10px;
+          padding: 30px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+          text-align: center;
+          padding-bottom: 20px;
+          border-bottom: 3px solid #0d9488;
+          margin-bottom: 30px;
+        }
+        .header h1 {
+          color: #0d9488;
+          margin: 0;
+          font-size: 28px;
+        }
+        .header p {
+          color: #666;
+          margin: 10px 0 0 0;
+          font-size: 14px;
+        }
+        .content {
+          margin: 20px 0;
+        }
+        .cita-card {
+          background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+          border: 2px solid #0d9488;
+          border-radius: 12px;
+          padding: 25px;
+          margin: 25px 0;
+        }
+        .cita-card h2 {
+          color: #0d9488;
+          margin: 0 0 20px 0;
+          font-size: 20px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .cita-detail {
+          display: flex;
+          margin-bottom: 12px;
+          padding-bottom: 12px;
+          border-bottom: 1px solid rgba(13, 148, 136, 0.2);
+        }
+        .cita-detail:last-child {
+          border-bottom: none;
+          margin-bottom: 0;
+          padding-bottom: 0;
+        }
+        .cita-label {
+          font-weight: bold;
+          color: #0f766e;
+          width: 120px;
+          flex-shrink: 0;
+        }
+        .cita-value {
+          color: #333;
+        }
+        .button-container {
+          text-align: center;
+          margin: 30px 0;
+          display: flex;
+          gap: 15px;
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+        .btn {
+          display: inline-block;
+          padding: 14px 35px;
+          text-decoration: none;
+          border-radius: 8px;
+          font-weight: bold;
+          font-size: 15px;
+          transition: all 0.3s;
+        }
+        .btn-confirm {
+          background-color: #0d9488;
+          color: #ffffff !important;
+        }
+        .btn-confirm:hover {
+          background-color: #0f766e;
+        }
+        .btn-cancel {
+          background-color: #ffffff;
+          color: #dc2626 !important;
+          border: 2px solid #dc2626;
+        }
+        .btn-cancel:hover {
+          background-color: #fef2f2;
+        }
+        .info-box {
+          background-color: #f0f9ff;
+          border-left: 4px solid #0ea5e9;
+          padding: 15px;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+        .info-box p {
+          margin: 5px 0;
+          color: #0369a1;
+          font-size: 14px;
+        }
+        .footer {
+          margin-top: 30px;
+          padding-top: 20px;
+          border-top: 1px solid #ddd;
+          text-align: center;
+          font-size: 12px;
+          color: #666;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>📅 Cita de Orientación</h1>
+          <p>Universidad Metropolitana</p>
+        </div>
+
+        <div class="content">
+          <p>Hola <strong>${nombreEstudiante}</strong>,</p>
+
+          <p>Se ha agendado una cita de orientación vocacional para ti. A continuación encontrarás los detalles:</p>
+
+          <div class="cita-card">
+            <h2>📋 Detalles de tu Cita</h2>
+
+            <div class="cita-detail">
+              <span class="cita-label">📆 Fecha:</span>
+              <span class="cita-value">${fechaFormateada}</span>
+            </div>
+
+            <div class="cita-detail">
+              <span class="cita-label">🕐 Hora:</span>
+              <span class="cita-value">${hora}</span>
+            </div>
+
+            <div class="cita-detail">
+              <span class="cita-label">📍 Modalidad:</span>
+              <span class="cita-value">${modalidadTexto}</span>
+            </div>
+
+            <div class="cita-detail">
+              <span class="cita-label">👤 Especialista:</span>
+              <span class="cita-value">${nombreEspecialista}</span>
+            </div>
+
+            <div class="cita-detail">
+              <span class="cita-label">📝 Motivo:</span>
+              <span class="cita-value">${formatearMotivo(motivo)}</span>
+            </div>
+          </div>
+
+          <p style="text-align: center; font-size: 16px; color: #374151;">
+            <strong>Por favor confirma tu asistencia:</strong>
+          </p>
+
+          <div class="button-container">
+            <a href="${confirmarUrl}" class="btn btn-confirm">✓ Confirmar Asistencia</a>
+            <a href="${cancelarUrl}" class="btn btn-cancel">✗ Cancelar Cita</a>
+          </div>
+
+          <div class="info-box">
+            <p><strong>💡 Recomendaciones:</strong></p>
+            <p>• Si es presencial, llega 10 minutos antes a la cita</p>
+            <p>• Si es virtual, asegúrate de tener buena conexión a internet</p>
+            <p>• Prepara tus dudas y preguntas sobre orientación vocacional</p>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
+          <p>Sistema de Orientación Vocacional - Universidad Metropolitana</p>
           <p>© ${new Date().getFullYear()} UNIMET. Todos los derechos reservados.</p>
         </div>
       </div>
