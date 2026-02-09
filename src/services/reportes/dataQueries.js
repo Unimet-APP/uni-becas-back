@@ -1,4 +1,4 @@
-const { EstudianteBecario, Usuario, Plaza, ReporteActividad, Postulacion, sequelize } = require('../../models');
+const { EstudianteBecario, Usuario, Plaza, ReporteActividad, Postulacion, SesionesTestOrientacion, ResultadosOrientacion, sequelize } = require('../../models');
 const { Op } = require('sequelize');
 
 /**
@@ -536,6 +536,183 @@ class DataQueries {
     );
 
     return distribucion.filter(d => d.postulaciones > 0); // Solo mostrar tipos con postulaciones
+  }
+
+  /**
+   * Obtiene información completa de orientación vocacional
+   * @param {Object} filtros - Filtros opcionales
+   * @returns {Promise<Object>}
+   */
+  static async getOrientacionVocacionalCompleto(filtros = {}) {
+    // 1. KPIs generales
+    const testsCompletados = await SesionesTestOrientacion.count({
+      where: { estado: 'finalizada' }
+    });
+
+    const testsEnProgreso = await SesionesTestOrientacion.count({
+      where: { estado: { [Op.in]: ['iniciada', 'ronda_1_completada', 'ronda_2_completada'] } }
+    });
+
+    const testsAbandonados = await SesionesTestOrientacion.count({
+      where: { estado: 'abandonada' }
+    });
+
+    const totalTestsIniciados = await SesionesTestOrientacion.count();
+    const tasaCompletitud = totalTestsIniciados > 0
+      ? ((testsCompletados / totalTestsIniciados) * 100).toFixed(2)
+      : 0;
+
+    const usuariosUnicos = await SesionesTestOrientacion.count({
+      distinct: true,
+      col: 'usuario_id'
+    });
+
+    // 2. Tests por tipo (Holland_RIASEC, ICO, Kuder)
+    const testsPorTipo = await SesionesTestOrientacion.findAll({
+      where: { estado: 'finalizada' },
+      attributes: [
+        'tipo_test',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
+      ],
+      group: ['tipo_test'],
+      order: [[sequelize.fn('COUNT', sequelize.col('id')), 'DESC']]
+    });
+
+    // 3. Perfiles RIASEC dominantes
+    const perfilesDominantes = await ResultadosOrientacion.findAll({
+      attributes: [
+        'perfil_dominante',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad']
+      ],
+      where: {
+        perfil_dominante: { [Op.ne]: null }
+      },
+      group: ['perfil_dominante'],
+      order: [[sequelize.fn('COUNT', sequelize.col('id')), 'DESC']],
+      limit: 10
+    });
+
+    // 4. Distribución temporal (tests por mes)
+    const testsPorMes = await sequelize.query(`
+      SELECT
+        DATE_TRUNC('month', fecha_completada) as mes,
+        COUNT(*) as cantidad,
+        COUNT(DISTINCT usuario_id) as usuarios_unicos
+      FROM sesiones_test_orientacion
+      WHERE estado = 'finalizada'
+        AND fecha_completada IS NOT NULL
+        AND fecha_completada >= NOW() - INTERVAL '12 months'
+      GROUP BY mes
+      ORDER BY mes DESC
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 5. Usuarios con tests completados (top 20)
+    const usuariosConTests = await sequelize.query(`
+      SELECT
+        u.id,
+        u.nombre,
+        u.apellido,
+        u.email,
+        u.role,
+        COUNT(DISTINCT st.id) as tests_completados,
+        MAX(st.fecha_completada) as ultimo_test,
+        STRING_AGG(DISTINCT st.tipo_test::text, ', ') as tipos_test_realizados
+      FROM usuarios u
+      INNER JOIN sesiones_test_orientacion st ON st.usuario_id = u.id
+      WHERE st.estado = 'finalizada'
+      GROUP BY u.id, u.nombre, u.apellido, u.email, u.role
+      ORDER BY tests_completados DESC, ultimo_test DESC
+      LIMIT 20
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // 6. Obtener resultados detallados (últimos 50 para el reporte)
+    const resultadosDetallados = await ResultadosOrientacion.findAll({
+      limit: 50,
+      order: [['createdAt', 'DESC']],
+      include: [
+        {
+          model: Usuario,
+          as: 'usuario',
+          attributes: ['nombre', 'apellido', 'email', 'role', 'carrera']
+        },
+        {
+          model: SesionesTestOrientacion,
+          as: 'sesion',
+          attributes: ['tipo_test', 'fecha_completada', 'estado']
+        }
+      ]
+    });
+
+    // 7. Calcular tiempo promedio de completitud
+    const tiemposCompletitud = await sequelize.query(`
+      SELECT
+        tipo_test,
+        AVG(EXTRACT(EPOCH FROM (fecha_completada - created_at)) / 60) as minutos_promedio
+      FROM sesiones_test_orientacion
+      WHERE estado = 'finalizada'
+        AND fecha_completada IS NOT NULL
+      GROUP BY tipo_test
+    `, {
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    return {
+      resumen: {
+        testsCompletados,
+        testsEnProgreso,
+        testsAbandonados,
+        totalTestsIniciados,
+        tasaCompletitud: parseFloat(tasaCompletitud),
+        usuariosUnicos
+      },
+      testsPorTipo: testsPorTipo.map(t => ({
+        tipo: t.tipo_test,
+        cantidad: parseInt(t.get('cantidad'))
+      })),
+      perfilesDominantes: perfilesDominantes.map(p => ({
+        perfil: p.perfil_dominante,
+        cantidad: parseInt(p.get('cantidad')),
+        porcentaje: testsCompletados > 0
+          ? ((parseInt(p.get('cantidad')) / testsCompletados) * 100).toFixed(2)
+          : 0
+      })),
+      testsPorMes: testsPorMes.map(m => ({
+        mes: new Date(m.mes).toLocaleDateString('es-ES', { year: 'numeric', month: 'long' }),
+        cantidad: parseInt(m.cantidad),
+        usuariosUnicos: parseInt(m.usuarios_unicos)
+      })),
+      usuariosConTests: usuariosConTests.map(u => ({
+        nombre: `${u.nombre} ${u.apellido}`,
+        email: u.email,
+        role: u.role,
+        testsCompletados: parseInt(u.tests_completados),
+        ultimoTest: u.ultimo_test,
+        tiposTestRealizados: u.tipos_test_realizados
+      })),
+      resultadosDetallados: resultadosDetallados.map(r => {
+        const resultado = r.toJSON();
+        return {
+          usuario: resultado.usuario ? `${resultado.usuario.nombre} ${resultado.usuario.apellido}` : 'Desconocido',
+          email: resultado.usuario?.email || '-',
+          carrera: resultado.usuario?.carrera || '-',
+          tipoTest: resultado.sesion?.tipo_test || '-',
+          perfilDominante: resultado.perfil_dominante,
+          puntajesRIASEC: resultado.puntajes_riasec || {},
+          puntajesICO: resultado.puntajes_ico || {},
+          puntajesKuder: resultado.puntajes_kuder || {},
+          fechaCompletado: resultado.sesion?.fecha_completada || resultado.createdAt,
+          top3Carreras: resultado.top_3_carreras || []
+        };
+      }),
+      tiemposPromedio: tiemposCompletitud.map(t => ({
+        tipoTest: t.tipo_test,
+        minutosPromedio: parseFloat(t.minutos_promedio || 0).toFixed(1)
+      }))
+    };
   }
 }
 

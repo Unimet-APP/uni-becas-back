@@ -109,6 +109,19 @@ router.get(
 );
 
 /**
+ * @route GET /api/v1/reportes/exportar/orientacion-vocacional
+ * @desc Exportar datos de orientación vocacional (tests, perfiles RIASEC, usuarios evaluados)
+ * @access Admin, Especialista
+ * @query formato - Formato de exportación (excel, pdf, json)
+ */
+router.get(
+  '/orientacion-vocacional',
+  authenticate,
+  requireRole(['admin', 'especialista']),
+  reportesExportController.exportarOrientacionVocacional
+);
+
+/**
  * @route GET /api/v1/reportes/exportar/dashboard
  * @desc Exportar dashboard completo con todos los datos
  * @access Gestor de Becas

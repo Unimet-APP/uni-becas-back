@@ -472,7 +472,8 @@ class AuthService {
          email: emailUnimet.toLowerCase(),
          carrera: carrera || aspirante.carrera,
          trimestre: trimestre || aspirante.trimestre,
-         emailVerified: true
+         emailVerified: true,
+         fueAspirante: true
        }, { transaction });
 
        await transaction.commit();

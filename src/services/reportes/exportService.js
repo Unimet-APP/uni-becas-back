@@ -277,6 +277,44 @@ class ExportService {
   }
 
   /**
+   * Exportar datos de orientación vocacional
+   * @param {Object} filtros - Filtros opcionales
+   * @param {String} formato - 'excel' | 'pdf' | 'json'
+   * @returns {Promise<{buffer: Buffer, filename: string, contentType: string}>}
+   */
+  async exportarOrientacionVocacional(filtros = {}, formato = 'json') {
+    this.validarFormato(formato);
+
+    const datos = await DataQueries.getOrientacionVocacionalCompleto(filtros);
+
+    if (formato === 'json') {
+      return {
+        data: datos,
+        filename: this.generarNombreArchivo('orientacion_vocacional', 'json'),
+        contentType: 'application/json'
+      };
+    }
+
+    if (formato === 'excel') {
+      const buffer = await this.excelExporter.generarReporteOrientacionVocacional(datos);
+      return {
+        buffer,
+        filename: this.generarNombreArchivo('orientacion_vocacional', 'excel'),
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      };
+    }
+
+    if (formato === 'pdf') {
+      const buffer = await this.pdfExporter.generarReporteOrientacionVocacional(datos, true);
+      return {
+        buffer,
+        filename: this.generarNombreArchivo('orientacion_vocacional', 'pdf'),
+        contentType: 'application/pdf'
+      };
+    }
+  }
+
+  /**
    * Exportar dashboard completo con todos los datos
    * @param {Object} filtros - Filtros opcionales
    * @param {String} formato - 'excel' | 'pdf' | 'json'

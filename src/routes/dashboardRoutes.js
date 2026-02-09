@@ -279,4 +279,49 @@ router.get(
   dashboardController.getKPIs
 );
 
+/**
+ * @swagger
+ * /api/v1/dashboard/kpis-general:
+ *   get:
+ *     summary: Obtener KPIs generales del dashboard (becas + orientación vocacional + usuarios)
+ *     description: |
+ *       **📊 ENDPOINT DE DASHBOARD GENERAL CON KPIs INTEGRADOS**
+ *
+ *       Retorna indicadores clave de rendimiento del sistema completo, organizados en 3 categorías:
+ *       - Becas (becarios, plazas, postulaciones)
+ *       - Orientación Vocacional (tests completados, perfiles, tasa de completitud)
+ *       - Usuarios (aspirantes, estudiantes, transiciones)
+ *
+ *       **🔐 Permisos requeridos:**
+ *       - Solo usuarios con rol: 'admin'
+ *     tags: [Dashboard]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: periodo
+ *         schema:
+ *           type: string
+ *           pattern: '^\d{4}-[1-3]$'
+ *         description: Período académico opcional (formato YYYY-N)
+ *         example: '2025-1'
+ *     responses:
+ *       200:
+ *         description: KPIs generales obtenidos exitosamente
+ *       400:
+ *         description: Formato de período inválido
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Acceso denegado - Solo administradores
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get(
+  '/kpis-general',
+  authenticate,
+  requireRole(['admin']),
+  dashboardController.getKPIsGeneral
+);
+
 module.exports = router;

@@ -706,6 +706,107 @@ class PDFExporter {
       });
     });
   }
+
+  /**
+   * Genera reporte de orientación vocacional en PDF
+   */
+  async generarReporteOrientacionVocacional(datos, incluirGraficos = true) {
+    const chunks = [];
+    const doc = new PDFDocument({ size: 'LETTER', margin: 50 });
+
+    doc.on('data', (chunk) => chunks.push(chunk));
+
+    // Header
+    this.agregarHeader(doc, 'Reporte de Orientación Vocacional');
+
+    // Resumen General
+    doc.moveDown(2);
+    doc.fillColor(PDFExporter.COLORS.primary).fontSize(14).font('Helvetica-Bold')
+       .text('Resumen General', 50, doc.y);
+    doc.moveDown();
+
+    doc.fillColor(PDFExporter.COLORS.text).fontSize(12).font('Helvetica');
+
+    const resumen = [
+      { label: 'Tests Completados:', value: datos.resumen.testsCompletados },
+      { label: 'Tests en Progreso:', value: datos.resumen.testsEnProgreso },
+      { label: 'Tests Abandonados:', value: datos.resumen.testsAbandonados },
+      { label: 'Tasa de Completitud:', value: `${datos.resumen.tasaCompletitud}%` },
+      { label: 'Usuarios Únicos:', value: datos.resumen.usuariosUnicos }
+    ];
+
+    resumen.forEach(item => {
+      doc.font('Helvetica-Bold').text(item.label, { continued: true });
+      doc.font('Helvetica').text(` ${item.value}`);
+      doc.moveDown(0.5);
+    });
+
+    // Tests por Tipo
+    doc.moveDown(2);
+    doc.fillColor(PDFExporter.COLORS.primary).fontSize(14).font('Helvetica-Bold')
+       .text('Tests por Tipo');
+    doc.moveDown();
+
+    datos.testsPorTipo.forEach(tipo => {
+      doc.fillColor(PDFExporter.COLORS.text).font('Helvetica')
+         .text(`• ${tipo.tipo}: ${tipo.cantidad} tests`);
+      doc.moveDown(0.3);
+    });
+
+    // Perfiles RIASEC Dominantes
+    doc.addPage();
+    doc.fillColor(PDFExporter.COLORS.primary).fontSize(18).font('Helvetica-Bold')
+       .text('Perfiles RIASEC Dominantes', { align: 'center' });
+    doc.moveDown(2);
+
+    datos.perfilesDominantes.forEach((perfil, index) => {
+      doc.fillColor(PDFExporter.COLORS.text).fontSize(12).font('Helvetica-Bold')
+         .text(`${index + 1}. ${perfil.perfil}`, { continued: true });
+      doc.font('Helvetica')
+         .text(` - ${perfil.cantidad} usuarios (${perfil.porcentaje}%)`);
+      doc.moveDown(0.5);
+    });
+
+    // Tabla de Usuarios
+    if (datos.usuariosConTests && datos.usuariosConTests.length > 0) {
+      doc.addPage();
+      doc.fillColor(PDFExporter.COLORS.primary).fontSize(14).font('Helvetica-Bold')
+         .text('Top Usuarios con Tests Completados');
+      doc.moveDown();
+
+      const tableTop = doc.y;
+      const headers = ['Nombre', 'Email', 'Tests'];
+      const columnWidths = [180, 180, 80];
+      let currentX = 50;
+
+      // Headers
+      doc.fillColor(PDFExporter.COLORS.primary).fontSize(10).font('Helvetica-Bold');
+      headers.forEach((header, i) => {
+        doc.text(header, currentX, tableTop, { width: columnWidths[i], align: 'left' });
+        currentX += columnWidths[i];
+      });
+
+      doc.moveDown();
+
+      // Rows (primeros 15)
+      doc.fillColor(PDFExporter.COLORS.text).fontSize(9).font('Helvetica');
+      datos.usuariosConTests.slice(0, 15).forEach((usuario, index) => {
+        const y = doc.y;
+        doc.text(usuario.nombre, 50, y, { width: 180, ellipsis: true });
+        doc.text(usuario.email, 230, y, { width: 180, ellipsis: true });
+        doc.text(usuario.testsCompletados.toString(), 410, y, { width: 80 });
+        doc.moveDown(0.8);
+      });
+    }
+
+    doc.end();
+
+    return new Promise((resolve) => {
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  }
 }
 
 module.exports = PDFExporter;

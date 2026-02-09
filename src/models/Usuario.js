@@ -139,6 +139,12 @@ module.exports = (sequelize) => {
       allowNull: false,
       comment: 'Indica si el usuario debe cambiar su contraseña en el primer login (usuario creado automáticamente)'
     },
+    fueAspirante: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Indica si el usuario fue aspirante y se convirtió en estudiante'
+    },
     verificationCode: {
       type: DataTypes.STRING(255),
       allowNull: true

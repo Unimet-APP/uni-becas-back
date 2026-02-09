@@ -899,6 +899,105 @@ class ExcelExporter {
 
     return await workbook.xlsx.writeBuffer();
   }
+
+  /**
+   * Genera reporte de orientación vocacional en Excel
+   */
+  async generarReporteOrientacionVocacional(datos) {
+    const workbook = this.crearWorkbook();
+
+    // Hoja 1: Resumen General
+    const resumenSheet = workbook.addWorksheet('Resumen');
+    resumenSheet.mergeCells('A1:D1');
+    const titleCell = resumenSheet.getCell('A1');
+    titleCell.value = 'Reporte de Orientación Vocacional';
+    titleCell.font = { size: 16, bold: true, color: { argb: 'FF' + ExcelExporter.COLORS.primary } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    resumenSheet.getRow(1).height = 30;
+
+    // Metadata
+    resumenSheet.getCell('A3').value = `Generado: ${new Date().toLocaleString('es-VE')}`;
+
+    // KPIs principales
+    resumenSheet.getCell('A5').value = 'Tests completados:';
+    resumenSheet.getCell('B5').value = datos.resumen.testsCompletados;
+    resumenSheet.getCell('A6').value = 'Tests en progreso:';
+    resumenSheet.getCell('B6').value = datos.resumen.testsEnProgreso;
+    resumenSheet.getCell('A7').value = 'Tests abandonados:';
+    resumenSheet.getCell('B7').value = datos.resumen.testsAbandonados;
+    resumenSheet.getCell('A8').value = 'Tasa de completitud:';
+    resumenSheet.getCell('B8').value = `${datos.resumen.tasaCompletitud}%`;
+    resumenSheet.getCell('A9').value = 'Usuarios únicos:';
+    resumenSheet.getCell('B9').value = datos.resumen.usuariosUnicos;
+
+    resumenSheet.getColumn('A').width = 25;
+    resumenSheet.getColumn('B').width = 15;
+
+    // Hoja 2: Tests por Tipo
+    const tiposSheet = workbook.addWorksheet('Tests por Tipo');
+    tiposSheet.getCell('A1').value = 'Distribución por Tipo de Test';
+    tiposSheet.getCell('A1').font = { size: 14, bold: true };
+
+    const tiposHeaders = ['Tipo de Test', 'Cantidad'];
+    const tiposHeaderRow = tiposSheet.getRow(3);
+    tiposHeaders.forEach((header, index) => {
+      tiposHeaderRow.getCell(index + 1).value = header;
+    });
+    this.aplicarEstiloHeader(tiposSheet, 3, tiposHeaders.length);
+
+    datos.testsPorTipo.forEach((tipo, index) => {
+      const row = tiposSheet.getRow(4 + index);
+      row.values = [tipo.tipo, tipo.cantidad];
+    });
+
+    this.ajustarAnchoColumnas(tiposSheet);
+
+    // Hoja 3: Perfiles Dominantes
+    const perfilesSheet = workbook.addWorksheet('Perfiles RIASEC');
+    perfilesSheet.getCell('A1').value = 'Perfiles RIASEC Dominantes';
+    perfilesSheet.getCell('A1').font = { size: 14, bold: true };
+
+    const perfilesHeaders = ['Perfil', 'Cantidad', 'Porcentaje'];
+    const perfilesHeaderRow = perfilesSheet.getRow(3);
+    perfilesHeaders.forEach((header, index) => {
+      perfilesHeaderRow.getCell(index + 1).value = header;
+    });
+    this.aplicarEstiloHeader(perfilesSheet, 3, perfilesHeaders.length);
+
+    datos.perfilesDominantes.forEach((perfil, index) => {
+      const row = perfilesSheet.getRow(4 + index);
+      row.values = [perfil.perfil, perfil.cantidad, `${perfil.porcentaje}%`];
+    });
+
+    this.ajustarAnchoColumnas(perfilesSheet);
+
+    // Hoja 4: Usuarios con Tests
+    const usuariosSheet = workbook.addWorksheet('Usuarios');
+    usuariosSheet.getCell('A1').value = 'Usuarios con Tests Completados';
+    usuariosSheet.getCell('A1').font = { size: 14, bold: true };
+
+    const usuariosHeaders = ['Nombre', 'Email', 'Role', 'Tests Completados', 'Tipos de Test'];
+    const usuariosHeaderRow = usuariosSheet.getRow(3);
+    usuariosHeaders.forEach((header, index) => {
+      usuariosHeaderRow.getCell(index + 1).value = header;
+    });
+    this.aplicarEstiloHeader(usuariosSheet, 3, usuariosHeaders.length);
+
+    datos.usuariosConTests.forEach((usuario, index) => {
+      const row = usuariosSheet.getRow(4 + index);
+      row.values = [
+        usuario.nombre,
+        usuario.email,
+        usuario.role,
+        usuario.testsCompletados,
+        usuario.tiposTestRealizados
+      ];
+    });
+
+    this.ajustarAnchoColumnas(usuariosSheet);
+
+    return await workbook.xlsx.writeBuffer();
+  }
 }
 
 module.exports = ExcelExporter;

@@ -221,6 +221,33 @@ class ReportesExportController {
    * Exportar dashboard completo con todos los datos
    * GET /api/v1/reportes/exportar/dashboard?formato=excel|pdf|json&periodo=2025-1
    */
+  /**
+   * Exportar datos de orientación vocacional
+   * GET /api/v1/reportes/exportar/orientacion-vocacional?formato=excel|pdf|json
+   */
+  async exportarOrientacionVocacional(req, res) {
+    try {
+      const { formato = 'json' } = req.query;
+
+      logger.info(`[ReportesExport] Exportando orientación vocacional en formato ${formato}`, {
+        usuario: req.user?.id
+      });
+
+      const resultado = await this.exportService.exportarOrientacionVocacional({}, formato.toLowerCase());
+
+      if (formato.toLowerCase() === 'json') {
+        return sendSuccess(res, resultado.data, 'Reporte de orientación vocacional generado exitosamente');
+      }
+
+      res.setHeader('Content-Type', resultado.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${resultado.filename}"`);
+      return res.send(resultado.buffer);
+    } catch (error) {
+      logger.error('[ReportesExport] Error al exportar orientación vocacional:', error);
+      return sendError(res, error.message, 500);
+    }
+  }
+
   async exportarDashboardCompleto(req, res) {
     try {
       const { formato = 'json', periodo } = req.query;
@@ -259,5 +286,6 @@ module.exports = {
   exportarActividades: controller.exportarActividades.bind(controller),
   exportarDistribucionBecas: controller.exportarDistribucionBecas.bind(controller),
   exportarDistribucionPostulantes: controller.exportarDistribucionPostulantes.bind(controller),
+  exportarOrientacionVocacional: controller.exportarOrientacionVocacional.bind(controller),
   exportarDashboardCompleto: controller.exportarDashboardCompleto.bind(controller)
 };
