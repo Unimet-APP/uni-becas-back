@@ -340,33 +340,42 @@ class OrientacionVocacionalController {
       console.error('❌ [obtenerHistorial Controller] Historial no es un array:', typeof historial);
       return sendSuccess(res, {
         historial: [],
+        sesionesEnProgreso: [],
         total: 0,
+        totalEnProgreso: 0,
       }, 'Historial obtenido exitosamente (vacío)');
     }
 
     const historialFormateado = historial.map(sesion => {
       // resultado es un array porque es hasMany, tomar el primero si existe
-      const resultado = Array.isArray(sesion.resultado) 
-        ? sesion.resultado[0] 
+      const resultado = Array.isArray(sesion.resultado)
+        ? sesion.resultado[0]
         : sesion.resultado;
-      
+
       return {
         id: sesion.id,
-        tipoTest: sesion.tipo_test, // CORRECCIÓN: usar snake_case
-        estado: sesion.estado || 'iniciada', // Si no tiene estado, asumir 'iniciada'
+        tipoTest: sesion.tipo_test,
+        estado: sesion.estado || 'iniciada',
         fechaInicio: sesion.fecha_inicio,
         fechaCompletada: sesion.fecha_completada,
         puntuacionesRonda1: sesion.puntuaciones_ronda_1,
         puntuacionesRonda2: sesion.puntuaciones_ronda_2,
-        tieneResultado: !!resultado, // Indicar si tiene resultado procesado
+        tieneResultado: !!resultado,
       };
     });
 
-    console.log('✅ [obtenerHistorial Controller] Historial formateado:', historialFormateado.length, 'elementos');
+    // Sesiones en progreso: no finalizadas (para card "Tests en progreso" y botón Continuar)
+    const sesionesEnProgreso = historialFormateado.filter(
+      s => s.estado !== 'finalizada'
+    );
+
+    console.log('✅ [obtenerHistorial Controller] Historial formateado:', historialFormateado.length, 'elementos, en progreso:', sesionesEnProgreso.length);
 
     return sendSuccess(res, {
       historial: historialFormateado,
+      sesionesEnProgreso,
       total: historialFormateado.length,
+      totalEnProgreso: sesionesEnProgreso.length,
     }, 'Historial obtenido exitosamente');
   });
 

@@ -203,6 +203,47 @@ const actualizarTrayectoriaSchema = Joi.object({
   ).optional(),
 }).min(1).messages({ 'object.min': 'Debe enviar al menos un campo para actualizar' });
 
+// Dimensiones RIASEC válidas
+const DIMENSIONES_RIASEC = ['Realista', 'Investigador', 'Artístico', 'Social', 'Emprendedor', 'Convencional'];
+
+const createPreguntaSchema = Joi.object({
+  codigo_pregunta: Joi.string().max(50).required()
+    .messages({ 'any.required': 'El código de pregunta es requerido' }),
+  tipo_test: Joi.string().valid('Kuder', 'Holland_RIASEC', 'Personalizado', 'ICO').required()
+    .messages({ 'any.only': 'tipo_test debe ser Kuder, Holland_RIASEC, Personalizado o ICO' }),
+  dimension_principal: Joi.string().valid(...DIMENSIONES_RIASEC).required()
+    .messages({ 'any.only': 'dimension_principal debe ser una dimensión RIASEC' }),
+  texto__pregunta: Joi.string().min(1).required()
+    .messages({ 'any.required': 'El texto de la pregunta es requerido' }),
+  tipo_pregunta: Joi.string().valid('directa', 'comparativa', 'situacional', 'proyectiva').optional().default('directa'),
+  peso_pregunta: Joi.string().valid('alta', 'media', 'baja').optional().default('media'),
+  dimension_secundaria: Joi.array().items(Joi.string().valid(...DIMENSIONES_RIASEC)).optional().default([]),
+  instrucciones_pregunta: Joi.string().allow('').optional(),
+  instrucciones_respuesta: Joi.array().optional().default([]),
+  carreras_relacionadas: Joi.array().optional().default([]),
+  correlaciones_academicas: Joi.object().optional().default({}),
+  activa: Joi.boolean().optional().default(true),
+});
+
+const updatePreguntaSchema = Joi.object({
+  codigo_pregunta: Joi.string().max(50).optional(),
+  tipo_test: Joi.string().valid('Kuder', 'Holland_RIASEC', 'Personalizado', 'ICO').optional(),
+  dimension_principal: Joi.string().valid(...DIMENSIONES_RIASEC).optional(),
+  texto__pregunta: Joi.string().min(1).optional(),
+  tipo_pregunta: Joi.string().valid('directa', 'comparativa', 'situacional', 'proyectiva').optional(),
+  peso_pregunta: Joi.string().valid('alta', 'media', 'baja').optional(),
+  dimension_secundaria: Joi.array().items(Joi.string().valid(...DIMENSIONES_RIASEC)).optional(),
+  instrucciones_pregunta: Joi.string().allow('').optional(),
+  instrucciones_respuesta: Joi.array().optional(),
+  carreras_relacionadas: Joi.array().optional(),
+  correlaciones_academicas: Joi.object().optional(),
+  activa: Joi.boolean().optional(),
+}).min(1).messages({ 'object.min': 'Debe enviar al menos un campo para actualizar' });
+
+const preguntaIdParamSchema = Joi.object({
+  id: Joi.string().uuid().required().messages({ 'string.guid': 'ID de pregunta inválido' }),
+});
+
 module.exports = {
   validateIniciarTest: validate(iniciarTestSchema),
   validateGuardarRespuestasRonda1: validate(guardarRespuestasRonda1Schema),
@@ -212,4 +253,7 @@ module.exports = {
   validateGuardarRespuestasICO: validate(guardarRespuestasICOSchema),
   validateSesionIdParamICO: validate(sesionIdParamICOSchema, 'params'),
   validateActualizarTrayectoria: validate(actualizarTrayectoriaSchema),
+  validateCreatePregunta: validate(createPreguntaSchema),
+  validateUpdatePregunta: validate(updatePreguntaSchema),
+  validatePreguntaIdParam: validate(preguntaIdParamSchema, 'params'),
 };

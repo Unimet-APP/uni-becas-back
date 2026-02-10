@@ -378,5 +378,8 @@ router.post(
   orientacionVocacionalController.analizarCambioCarrera
 );
 
+// Gestión de preguntas de tests (especialista/admin): listar, crear, editar, desactivar
+const preguntasOrientacionRoutes = require('./preguntasOrientacionRoutes');
+router.use('/preguntas', preguntasOrientacionRoutes);
 
 module.exports = router;

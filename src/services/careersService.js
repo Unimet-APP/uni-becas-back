@@ -7,8 +7,8 @@ function toInt(value, fallback) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 }
 
-async function listCareers({ q, faculty, area, page, limit }) {
-  const where = { is_active: true };
+async function listCareers({ q, faculty, area, page, limit, includeInactive = false }) {
+  const where = includeInactive ? {} : { is_active: true };
 
   if (q) {
     where[Op.or] = [
@@ -47,7 +47,60 @@ async function getCareerById(id) {
   });
 }
 
+async function getCareerByIdForEspecialista(id) {
+  return Career.findByPk(id);
+}
+
+async function createCareer(payload) {
+  const {
+    code,
+    name,
+    faculty,
+    area,
+    description,
+    profile,
+    job_field,
+    duration,
+    modality,
+  } = payload;
+  return Career.create({
+    code: code || null,
+    name,
+    faculty,
+    area: area || null,
+    description: description || null,
+    profile: profile || null,
+    job_field: job_field || null,
+    duration: duration || null,
+    modality: modality || null,
+    is_active: true,
+  });
+}
+
+async function updateCareer(id, payload) {
+  const career = await Career.findByPk(id);
+  if (!career) return null;
+  const allowed = ["code", "name", "faculty", "area", "description", "profile", "job_field", "duration", "modality", "is_active"];
+  const toUpdate = {};
+  for (const key of allowed) {
+    if (payload[key] !== undefined) toUpdate[key] = payload[key];
+  }
+  await career.update(toUpdate);
+  return career;
+}
+
+async function deleteCareer(id) {
+  const career = await Career.findByPk(id);
+  if (!career) return false;
+  await career.update({ is_active: false });
+  return true;
+}
+
 module.exports = {
   listCareers,
   getCareerById,
+  getCareerByIdForEspecialista,
+  createCareer,
+  updateCareer,
+  deleteCareer,
 };

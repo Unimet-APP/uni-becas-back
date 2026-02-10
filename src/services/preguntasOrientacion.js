@@ -256,6 +256,142 @@ class PreguntasOrientacionService {
         }
     }
 
+    /**
+     * Lista preguntas para el especialista (con filtros). Incluye inactivas.
+     */
+    async listForEspecialista({ tipo_test, dimension_principal, activa, page = 1, limit = 50 }) {
+        try {
+            const where = {};
+            if (tipo_test) where.tipo_test = tipo_test;
+            if (dimension_principal) where.dimension_principal = dimension_principal;
+            if (typeof activa === 'boolean') where.activa = activa;
+
+            const offset = (Math.max(1, parseInt(page, 10)) - 1) * Math.min(100, Math.max(1, parseInt(limit, 10)));
+            const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+
+            const { rows, count } = await PreguntasOrientacion.findAndCountAll({
+                where,
+                order: [['tipo_test', 'ASC'], ['dimension_principal', 'ASC'], ['codigo_pregunta', 'ASC']],
+                limit: limitNum,
+                offset,
+            });
+
+            return {
+                data: rows,
+                pagination: {
+                    page: Math.max(1, parseInt(page, 10)),
+                    limit: limitNum,
+                    total: count,
+                    totalPages: Math.ceil(count / limitNum) || 1,
+                },
+            };
+        } catch (error) {
+            this._handleError('listForEspecialista', error);
+        }
+    }
+
+    /**
+     * Obtiene una pregunta por ID (para especialista, incluye inactivas).
+     */
+    async getByIdForEspecialista(id) {
+        try {
+            const pregunta = await PreguntasOrientacion.findByPk(id);
+            if (!pregunta) throw new ApiError(404, 'Pregunta no encontrada');
+            return pregunta;
+        } catch (error) {
+            this._handleError('getByIdForEspecialista', error);
+        }
+    }
+
+    /**
+     * Crea una nueva pregunta (especialista/admin).
+     */
+    async createForEspecialista(payload) {
+        try {
+            const {
+                codigo_pregunta,
+                tipo_test,
+                dimension_principal,
+                texto__pregunta,
+                tipo_pregunta = 'directa',
+                peso_pregunta = 'media',
+                dimension_secundaria,
+                instrucciones_pregunta,
+                instrucciones_respuesta,
+                carreras_relacionadas,
+                correlaciones_academicas,
+                activa = true,
+            } = payload;
+
+            const existing = await PreguntasOrientacion.findOne({
+                where: { codigo_pregunta, tipo_test },
+            });
+            if (existing) throw new ApiError(409, 'Ya existe una pregunta con ese código para este tipo de test');
+
+            const pregunta = await PreguntasOrientacion.create({
+                codigo_pregunta,
+                tipo_test,
+                dimension_principal,
+                texto__pregunta,
+                tipo_pregunta,
+                peso_pregunta,
+                dimension_secundaria: dimension_secundaria || [],
+                instrucciones_pregunta: instrucciones_pregunta || null,
+                instrucciones_respuesta: instrucciones_respuesta || [],
+                carreras_relacionadas: carreras_relacionadas || [],
+                correlaciones_academicas: correlaciones_academicas || {},
+                activa: !!activa,
+            });
+            return pregunta;
+        } catch (error) {
+            this._handleError('createForEspecialista', error);
+        }
+    }
+
+    /**
+     * Actualiza una pregunta (especialista/admin).
+     */
+    async updateForEspecialista(id, payload) {
+        try {
+            const pregunta = await PreguntasOrientacion.findByPk(id);
+            if (!pregunta) throw new ApiError(404, 'Pregunta no encontrada');
+
+            const allowed = [
+                'codigo_pregunta', 'tipo_test', 'dimension_principal', 'texto__pregunta',
+                'tipo_pregunta', 'peso_pregunta', 'dimension_secundaria', 'instrucciones_pregunta',
+                'instrucciones_respuesta', 'carreras_relacionadas', 'correlaciones_academicas', 'activa',
+            ];
+            const toUpdate = {};
+            for (const key of allowed) {
+                if (payload[key] !== undefined) {
+                    if (key === 'dimension_secundaria' && !Array.isArray(payload[key])) continue;
+                    if (key === 'instrucciones_respuesta' && !Array.isArray(payload[key])) continue;
+                    if (key === 'carreras_relacionadas' && !Array.isArray(payload[key])) continue;
+                    if (key === 'correlaciones_academicas' && (payload[key] !== null && typeof payload[key] !== 'object')) continue;
+                    toUpdate[key] = payload[key];
+                }
+            }
+            await pregunta.update(toUpdate);
+            return pregunta;
+        } catch (error) {
+            this._handleError('updateForEspecialista', error);
+        }
+    }
+
+    /**
+     * Desactiva una pregunta (soft). No borra para no romper historial de respuestas.
+     */
+    async deleteForEspecialista(id) {
+        try {
+            const pregunta = await PreguntasOrientacion.findByPk(id);
+            if (!pregunta) throw new ApiError(404, 'Pregunta no encontrada');
+            await pregunta.update({ activa: false });
+            return { message: 'Pregunta desactivada correctamente' };
+        } catch (error) {
+            this._handleError('deleteForEspecialista', error);
+        }
+    }
+
     _handleError(metodo, error) {
         console.error(`Error en PreguntasOrientacionService.${metodo}:`, error);
         if (error instanceof ApiError) throw error;
