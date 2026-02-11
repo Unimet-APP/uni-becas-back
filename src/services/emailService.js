@@ -1388,8 +1388,64 @@ class EmailService {
    * @param {string} ctaUrl - URL del botón CTA (opcional)
    * @returns {string} HTML del email
    */
-  getCampañaGenericaTemplate(titulo, contenido, ctaTexto = null, ctaUrl = null) {
+  getCampañaGenericaTemplate(titulo, contenido, ctaTexto = null, ctaUrl = null, templateId = 'clasico') {
     const supportEmail = process.env.SUPPORT_EMAIL || 'soporte.becas@unimet.edu.ve';
+
+    // Paletas de colores por template
+    const temas = {
+      clasico: {
+        headerBg: '#0d9488',
+        headerBorder: '#0d9488',
+        titleColor: '#ffffff',
+        subtitleColor: '#ccfbf1',
+        bodyBg: '#f0fdfa',
+        containerBg: '#ffffff',
+        ctaBg: '#0d9488',
+        ctaHover: '#0f766e',
+      },
+      universitario: {
+        headerBg: '#1d4ed8',
+        headerBorder: '#1d4ed8',
+        titleColor: '#ffffff',
+        subtitleColor: '#bfdbfe',
+        bodyBg: '#eff6ff',
+        containerBg: '#ffffff',
+        ctaBg: '#1d4ed8',
+        ctaHover: '#1e40af',
+      },
+      motivacional: {
+        headerBg: '#7c3aed',
+        headerBorder: '#7c3aed',
+        titleColor: '#ffffff',
+        subtitleColor: '#ede9fe',
+        bodyBg: '#f5f3ff',
+        containerBg: '#ffffff',
+        ctaBg: '#7c3aed',
+        ctaHover: '#6d28d9',
+      },
+      profesional: {
+        headerBg: '#1e293b',
+        headerBorder: '#334155',
+        titleColor: '#f1f5f9',
+        subtitleColor: '#94a3b8',
+        bodyBg: '#f8fafc',
+        containerBg: '#ffffff',
+        ctaBg: '#334155',
+        ctaHover: '#1e293b',
+      },
+      calido: {
+        headerBg: '#ea580c',
+        headerBorder: '#ea580c',
+        titleColor: '#ffffff',
+        subtitleColor: '#fed7aa',
+        bodyBg: '#fff7ed',
+        containerBg: '#ffffff',
+        ctaBg: '#ea580c',
+        ctaHover: '#c2410c',
+      },
+    };
+
+    const tema = temas[templateId] || temas['clasico'];
 
     return `
     <!DOCTYPE html>
@@ -1406,29 +1462,33 @@ class EmailService {
           max-width: 600px;
           margin: 0 auto;
           padding: 20px;
-          background-color: #f4f4f4;
+          background-color: ${tema.bodyBg};
         }
         .container {
-          background-color: #ffffff;
+          background-color: ${tema.containerBg};
           border-radius: 10px;
-          padding: 30px;
+          overflow: hidden;
           box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         .header {
           text-align: center;
-          padding-bottom: 20px;
-          border-bottom: 3px solid #0066cc;
-          margin-bottom: 30px;
+          padding: 30px 30px 24px;
+          background-color: ${tema.headerBg};
+          border-bottom: 3px solid ${tema.headerBorder};
+          margin-bottom: 0;
         }
         .header h1 {
-          color: #0066cc;
+          color: ${tema.titleColor};
           margin: 0;
           font-size: 24px;
         }
         .header p {
-          color: #666;
-          margin: 10px 0 0 0;
+          color: ${tema.subtitleColor};
+          margin: 8px 0 0 0;
           font-size: 14px;
+        }
+        .body-inner {
+          padding: 30px;
         }
         .content {
           margin: 20px 0;
@@ -1443,16 +1503,12 @@ class EmailService {
         .cta-button {
           display: inline-block;
           padding: 15px 40px;
-          background-color: #0066cc;
+          background-color: ${tema.ctaBg};
           color: #ffffff !important;
           text-decoration: none;
           border-radius: 5px;
           font-weight: bold;
           font-size: 16px;
-          transition: background-color 0.3s;
-        }
-        .cta-button:hover {
-          background-color: #0052a3;
         }
         .footer {
           margin-top: 30px;
@@ -1471,22 +1527,24 @@ class EmailService {
           <p>Universidad Metropolitana</p>
         </div>
 
-        <div class="content">
-          <p>Hola <strong>{{nombre}}</strong>,</p>
-          ${contenido}
-        </div>
-
-        ${ctaTexto && ctaUrl ? `
-          <div class="button-container">
-            <a href="${ctaUrl}" class="cta-button">${ctaTexto}</a>
+        <div class="body-inner">
+          <div class="content">
+            <p>Hola <strong>{{nombre}}</strong>,</p>
+            ${contenido}
           </div>
-        ` : ''}
 
-        <div class="footer">
-          <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
-          <p>Sistema de Orientación Vocacional - Universidad Metropolitana</p>
-          <p>Si tienes preguntas, contacta a: ${supportEmail}</p>
-          <p>© ${new Date().getFullYear()} UNIMET. Todos los derechos reservados.</p>
+          ${ctaTexto && ctaUrl ? `
+            <div class="button-container">
+              <a href="${ctaUrl}" class="cta-button">${ctaTexto}</a>
+            </div>
+          ` : ''}
+
+          <div class="footer">
+            <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
+            <p>Sistema de Orientación Vocacional - Universidad Metropolitana</p>
+            <p>Si tienes preguntas, contacta a: ${supportEmail}</p>
+            <p>© ${new Date().getFullYear()} UNIMET. Todos los derechos reservados.</p>
+          </div>
         </div>
       </div>
     </body>

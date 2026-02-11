@@ -211,7 +211,8 @@ class CampanasController {
       titulo,
       ctaTexto,
       ctaUrl,
-      usarTemplate = true
+      usarTemplate = true,
+      templateId = 'clasico'
     } = req.body;
 
     if (!destinatarios || destinatarios.length === 0) {
@@ -255,7 +256,8 @@ class CampanasController {
         titulo || asunto,
         contenido,
         ctaTexto,
-        ctaUrl
+        ctaUrl,
+        templateId
       );
     } else {
       htmlTemplate = contenido;
@@ -309,7 +311,8 @@ class CampanasController {
       contenido,
       titulo,
       ctaTexto,
-      ctaUrl
+      ctaUrl,
+      templateId = 'clasico'
     } = req.body;
 
     if (!grupo) {
@@ -339,7 +342,8 @@ class CampanasController {
       titulo || asunto,
       contenido,
       ctaTexto,
-      ctaUrl
+      ctaUrl,
+      templateId
     );
 
     // Enviar campaña masiva

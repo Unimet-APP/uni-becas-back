@@ -7,10 +7,16 @@ const crearCitaSchema = Joi.object({
       'string.guid': 'El ID del estudiante debe ser un UUID válido',
       'any.required': 'El ID del estudiante es requerido'
     }),
-  fecha: Joi.date().iso().min('now').required()
+  fecha: Joi.date().iso().custom((value, helpers) => {
+    const hoy = new Date();
+    const hoyUtc = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
+    const inputUtc = Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+    if (inputUtc < hoyUtc) return helpers.error('any.invalid');
+    return value;
+  }).required()
     .messages({
       'date.base': 'La fecha debe ser una fecha válida',
-      'date.min': 'La fecha no puede ser en el pasado',
+      'any.invalid': 'La fecha no puede ser en el pasado',
       'any.required': 'La fecha es requerida'
     }),
   hora: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
@@ -36,10 +42,16 @@ const crearCitaSchema = Joi.object({
 
 // Schema para actualizar una cita
 const actualizarCitaSchema = Joi.object({
-  fecha: Joi.date().iso().min('now').optional()
+  fecha: Joi.date().iso().custom((value, helpers) => {
+    const hoy = new Date();
+    const hoyUtc = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate());
+    const inputUtc = Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+    if (inputUtc < hoyUtc) return helpers.error('any.invalid');
+    return value;
+  }).optional()
     .messages({
       'date.base': 'La fecha debe ser una fecha válida',
-      'date.min': 'La fecha no puede ser en el pasado'
+      'any.invalid': 'La fecha no puede ser en el pasado'
     }),
   hora: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional()
     .messages({

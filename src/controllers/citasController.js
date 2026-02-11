@@ -198,13 +198,16 @@ class CitasController {
    */
   actualizarCita = asyncHandler(async (req, res) => {
     const { citaId } = req.params;
-    const especialistaId = req.user.id;
+    const userId = req.user.id;
     const datosActualizacion = req.body;
 
     const cita = await CitasOrientacion.findOne({
       where: {
         id: citaId,
-        especialista_id: especialistaId
+        [Op.or]: [
+          { especialista_id: userId },
+          { estudiante_id: userId }
+        ]
       }
     });
 
@@ -239,12 +242,15 @@ class CitasController {
    */
   cancelarCita = asyncHandler(async (req, res) => {
     const { citaId } = req.params;
-    const especialistaId = req.user.id;
+    const userId = req.user.id;
 
     const cita = await CitasOrientacion.findOne({
       where: {
         id: citaId,
-        especialista_id: especialistaId
+        [Op.or]: [
+          { especialista_id: userId },
+          { estudiante_id: userId }
+        ]
       }
     });
 
