@@ -337,7 +337,7 @@ class PreguntasOrientacionService {
                 peso_pregunta,
                 dimension_secundaria: dimension_secundaria || [],
                 instrucciones_pregunta: instrucciones_pregunta || null,
-                instrucciones_respuesta: instrucciones_respuesta || [],
+                instrucciones_respuesta: instrucciones_respuesta !== undefined ? instrucciones_respuesta : [],
                 carreras_relacionadas: carreras_relacionadas || [],
                 correlaciones_academicas: correlaciones_academicas || {},
                 activa: !!activa,
@@ -365,7 +365,8 @@ class PreguntasOrientacionService {
             for (const key of allowed) {
                 if (payload[key] !== undefined) {
                     if (key === 'dimension_secundaria' && !Array.isArray(payload[key])) continue;
-                    if (key === 'instrucciones_respuesta' && !Array.isArray(payload[key])) continue;
+                    // instrucciones_respuesta acepta array u objeto { tipo, opciones }
+if (key === 'instrucciones_respuesta' && (payload[key] != null && typeof payload[key] !== 'object')) continue;
                     if (key === 'carreras_relacionadas' && !Array.isArray(payload[key])) continue;
                     if (key === 'correlaciones_academicas' && (payload[key] !== null && typeof payload[key] !== 'object')) continue;
                     toUpdate[key] = payload[key];

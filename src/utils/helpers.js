@@ -44,6 +44,29 @@ const helpers = {
     return phone;
   },
 
+  /**
+   * Quita el prefijo "Facultad de " del nombre de facultad para evitar duplicación en la UI
+   * (ej: "Facultad: Facultad de Ingeniería" → "Facultad: Ingeniería").
+   */
+  normalizarFacultadParaDisplay: (faculty) => {
+    if (!faculty || typeof faculty !== 'string') return '';
+    const s = faculty.trim();
+    const prefijo = 'facultad de ';
+    return s.toLowerCase().startsWith(prefijo) ? s.slice(prefijo.length).trim() : s;
+  },
+
+  /**
+   * Normaliza el campo facultad (y faculty) en cada item de un array de recomendaciones de carrera.
+   * Útil al devolver resultados guardados que pueden tener "Facultad de X" guardado.
+   */
+  normalizarRecomendacionesFacultad: (arr) => {
+    if (!Array.isArray(arr)) return arr;
+    return arr.map((item) => {
+      const facultadNorm = helpers.normalizarFacultadParaDisplay(item.facultad || item.faculty || '');
+      return { ...item, facultad: facultadNorm, faculty: facultadNorm };
+    });
+  },
+
   // Generate slug from text
   generateSlug: (text) => {
     if (!text) return '';
@@ -241,7 +264,22 @@ const helpers = {
     }
     if (typeof value === 'number') return value !== 0;
     return Boolean(value);
-  }
+  },
+
+  /**
+   * Extrae el array de opciones desde instrucciones_respuesta (preguntas orientación vocacional).
+   * Acepta: array de strings (ej. ["Sí", "No"]) u objeto { tipo, opciones }.
+   * @param {Array|Object|null|undefined} instrucciones - valor guardado en BD (JSONB)
+   * @returns {string[]} array de opciones para mostrar en el test
+   */
+  getOpcionesFromInstrucciones(instrucciones) {
+    if (instrucciones == null) return [];
+    if (Array.isArray(instrucciones)) return instrucciones;
+    if (typeof instrucciones === 'object' && Array.isArray(instrucciones.opciones)) {
+      return instrucciones.opciones;
+    }
+    return [];
+  },
 };
 
 module.exports = helpers;

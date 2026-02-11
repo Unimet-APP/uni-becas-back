@@ -1,6 +1,7 @@
 const asyncHandler = require('../utils/asyncHandler');
 const { sendSuccess } = require('../config/responses');
 const ApiError = require('../utils/ApiError');
+const helpers = require('../utils/helpers');
 
 const testOrientacionService = require('../services/testOrientacionService');
 const orientacionVocacionalService = require('../services/orientacionVocacionalService');
@@ -38,7 +39,7 @@ class OrientacionVocacionalController {
       peso: p.peso_pregunta,
       dimensionPrincipal: p.dimension_principal,
       dimensionSecundaria: p.dimension_secundaria || [],
-      opcionesRespuesta: p.instrucciones_respuesta || [],
+      opcionesRespuesta: helpers.getOpcionesFromInstrucciones(p.instrucciones_respuesta),
     }));
 
     return sendSuccess(res, {
@@ -89,7 +90,7 @@ class OrientacionVocacionalController {
       peso: p.peso_pregunta,
       dimensionPrincipal: p.dimension_principal,
       dimensionSecundaria: p.dimension_secundaria || [],
-      opcionesRespuesta: p.instrucciones_respuesta || [],
+      opcionesRespuesta: helpers.getOpcionesFromInstrucciones(p.instrucciones_respuesta),
     }));
 
     return sendSuccess(res, {
@@ -438,7 +439,7 @@ class OrientacionVocacionalController {
       tipoPregunta: p.tipo_pregunta,
       peso: p.peso_pregunta,
       dimensionPrincipal: p.dimension_principal,
-      opcionesRespuesta: p.instrucciones_respuesta || [],
+      opcionesRespuesta: helpers.getOpcionesFromInstrucciones(p.instrucciones_respuesta),
     }));
     return sendSuccess(res, { preguntas: formateadas }, 'Preguntas ICO obtenidas');
   });
@@ -450,6 +451,7 @@ class OrientacionVocacionalController {
   guardarRespuestasIcoYFinalizar = asyncHandler(async (req, res) => {
     const { sesionId, respuestas } = req.body;
     const payload = await icoOrientacionService.guardarRespuestasIcoYFinalizar(sesionId, respuestas);
+    const recs = payload.recomendacionesCarreras || payload.analisis_llm?.carrerasRecomendadas || [];
     const response = {
       resultadoId: payload.resultado.id,
       puntuaciones: payload.puntuaciones,
@@ -457,7 +459,7 @@ class OrientacionVocacionalController {
       perfilDominante: payload.perfil_dominante,
       perfilSecundario: payload.perfil_secundario,
       analisisLlm: payload.analisis_llm,
-      recomendacionesCarreras: payload.recomendacionesCarreras || payload.analisis_llm?.carrerasRecomendadas || [],
+      recomendacionesCarreras: helpers.normalizarRecomendacionesFacultad(recs),
     };
     // Validación Hugging Face (cuando USE_HUGGINGFACE_VALIDATION=true)
     if (payload.validacion_huggingface != null) {
@@ -483,7 +485,11 @@ class OrientacionVocacionalController {
   obtenerResultadoIco = asyncHandler(async (req, res) => {
     const { sesionId } = req.params;
     const resultado = await icoOrientacionService.obtenerResultadoIco(sesionId);
-    return sendSuccess(res, resultado, 'Resultado ICO obtenido');
+    const payload = resultado.toJSON ? resultado.toJSON() : { ...resultado };
+    if (Array.isArray(payload.recomendaciones_carreras)) {
+      payload.recomendaciones_carreras = helpers.normalizarRecomendacionesFacultad(payload.recomendaciones_carreras);
+    }
+    return sendSuccess(res, payload, 'Resultado ICO obtenido');
   });
 
   /**
@@ -558,12 +564,11 @@ class OrientacionVocacionalController {
           }
         }
         
-        // Si es array válido, asignarlo
+        // Si es array válido, asignarlo (normalizar facultad para no mostrar "Facultad de Facultad de X")
         if (Array.isArray(recomendaciones) && recomendaciones.length > 0) {
-          agrupadoPorUsuario[usuarioId].recomendacionesCarreras = recomendaciones;
+          agrupadoPorUsuario[usuarioId].recomendacionesCarreras = helpers.normalizarRecomendacionesFacultad(recomendaciones);
         } else if (recomendaciones && !Array.isArray(recomendaciones)) {
-          // Si es un objeto único, convertirlo a array
-          agrupadoPorUsuario[usuarioId].recomendacionesCarreras = [recomendaciones];
+          agrupadoPorUsuario[usuarioId].recomendacionesCarreras = helpers.normalizarRecomendacionesFacultad([recomendaciones]);
         }
         
         agrupadoPorUsuario[usuarioId].ultimaFechaTest = fechaResultado;

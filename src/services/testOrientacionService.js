@@ -7,6 +7,7 @@ const {
 } = require('../models');
 
 const ApiError = require('../utils/ApiError');
+const helpers = require('../utils/helpers');
 const { Op } = require('sequelize');
 
 class TestOrientacionService {
@@ -57,10 +58,8 @@ class TestOrientacionService {
    * corresponde a la dimensión principal de la pregunta
    */
   _normalizarRespuesta(respuesta, pregunta = null) {
-    const tieneOpciones = pregunta && 
-                          pregunta.instrucciones_respuesta && 
-                          Array.isArray(pregunta.instrucciones_respuesta) && 
-                          pregunta.instrucciones_respuesta.length > 0;
+    const opciones = pregunta ? helpers.getOpcionesFromInstrucciones(pregunta.instrucciones_respuesta) : [];
+    const tieneOpciones = opciones.length > 0;
 
     // Si ya es booleano, retornarlo
     if (typeof respuesta === 'boolean') {
@@ -80,7 +79,7 @@ class TestOrientacionService {
       // Si es texto de una opción
       if (tieneOpciones) {
         // Verificar si el texto coincide con alguna opción
-        const opcionEncontrada = pregunta.instrucciones_respuesta.find(
+        const opcionEncontrada = opciones.find(
           op => op.toLowerCase().trim() === lower || op === respuesta
         );
         // Si coincide con una opción, retornar true
@@ -96,7 +95,7 @@ class TestOrientacionService {
       if (tieneOpciones) {
         // Si es un índice de opción válido, retornar true
         // (índice >= 0 y < número de opciones)
-        return respuesta >= 0 && respuesta < pregunta.instrucciones_respuesta.length;
+        return respuesta >= 0 && respuesta < opciones.length;
       }
       // Para preguntas sin opciones: 0 = false, cualquier otro número = true
       return respuesta !== 0;
@@ -111,7 +110,7 @@ class TestOrientacionService {
       // Si tiene índice de opción
       if (typeof respuesta.indice === 'number') {
         if (tieneOpciones) {
-          return respuesta.indice >= 0 && respuesta.indice < pregunta.instrucciones_respuesta.length;
+          return respuesta.indice >= 0 && respuesta.indice < opciones.length;
         }
         return respuesta.indice >= 0;
       }
@@ -119,11 +118,11 @@ class TestOrientacionService {
       if (respuesta.opcionSeleccionada !== undefined && respuesta.opcionSeleccionada !== null) {
         if (tieneOpciones) {
           if (typeof respuesta.opcionSeleccionada === 'number') {
-            return respuesta.opcionSeleccionada >= 0 && 
-                   respuesta.opcionSeleccionada < pregunta.instrucciones_respuesta.length;
+            return respuesta.opcionSeleccionada >= 0 &&
+                   respuesta.opcionSeleccionada < opciones.length;
           }
           if (typeof respuesta.opcionSeleccionada === 'string') {
-            return pregunta.instrucciones_respuesta.includes(respuesta.opcionSeleccionada);
+            return opciones.includes(respuesta.opcionSeleccionada);
           }
         }
         return true; // Hay una opción seleccionada
@@ -305,9 +304,8 @@ class TestOrientacionService {
       if (!pregunta) continue;
       
       const dimensionPrincipal = pregunta.dimension_principal;
-      const tieneOpciones = pregunta.instrucciones_respuesta && 
-                            Array.isArray(pregunta.instrucciones_respuesta) && 
-                            pregunta.instrucciones_respuesta.length > 0;
+      const opcionesPregunta = helpers.getOpcionesFromInstrucciones(pregunta.instrucciones_respuesta);
+      const tieneOpciones = opcionesPregunta.length > 0;
       
       if (dimensionPrincipal && puntuaciones.hasOwnProperty(dimensionPrincipal)) {
         // Peso de la pregunta

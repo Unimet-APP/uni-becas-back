@@ -206,6 +206,17 @@ const actualizarTrayectoriaSchema = Joi.object({
 // Dimensiones RIASEC válidas
 const DIMENSIONES_RIASEC = ['Realista', 'Investigador', 'Artístico', 'Social', 'Emprendedor', 'Convencional'];
 
+// instrucciones_respuesta: array de strings (ej. ["Sí", "No"]) u objeto con tipo + opciones para el especialista
+const TIPOS_INSTRUCCIONES = ['si_no', 'opciones_multiples', 'dos_opciones', 'mas_de_dos_opciones'];
+const instruccionesRespuestaSchema = Joi.alternatives().try(
+  Joi.array().items(Joi.string()),
+  Joi.object({
+    tipo: Joi.string().valid(...TIPOS_INSTRUCCIONES).optional()
+      .messages({ 'any.only': `tipo debe ser uno de: ${TIPOS_INSTRUCCIONES.join(', ')}` }),
+    opciones: Joi.array().items(Joi.string()).optional().default([]),
+  })
+);
+
 const createPreguntaSchema = Joi.object({
   codigo_pregunta: Joi.string().max(50).required()
     .messages({ 'any.required': 'El código de pregunta es requerido' }),
@@ -219,7 +230,7 @@ const createPreguntaSchema = Joi.object({
   peso_pregunta: Joi.string().valid('alta', 'media', 'baja').optional().default('media'),
   dimension_secundaria: Joi.array().items(Joi.string().valid(...DIMENSIONES_RIASEC)).optional().default([]),
   instrucciones_pregunta: Joi.string().allow('').optional(),
-  instrucciones_respuesta: Joi.array().optional().default([]),
+  instrucciones_respuesta: instruccionesRespuestaSchema.optional().default([]),
   carreras_relacionadas: Joi.array().optional().default([]),
   correlaciones_academicas: Joi.object().optional().default({}),
   activa: Joi.boolean().optional().default(true),
@@ -234,7 +245,7 @@ const updatePreguntaSchema = Joi.object({
   peso_pregunta: Joi.string().valid('alta', 'media', 'baja').optional(),
   dimension_secundaria: Joi.array().items(Joi.string().valid(...DIMENSIONES_RIASEC)).optional(),
   instrucciones_pregunta: Joi.string().allow('').optional(),
-  instrucciones_respuesta: Joi.array().optional(),
+  instrucciones_respuesta: instruccionesRespuestaSchema.optional(),
   carreras_relacionadas: Joi.array().optional(),
   correlaciones_academicas: Joi.object().optional(),
   activa: Joi.boolean().optional(),

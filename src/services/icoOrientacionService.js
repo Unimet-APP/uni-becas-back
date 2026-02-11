@@ -15,6 +15,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 const ApiError = require('../utils/ApiError');
+const helpers = require('../utils/helpers');
 const testOrientacionService = require('./testOrientacionService');
 const llmService = require('./llmService');
 const trayectoriaAcademicaService = require('./trayectoriaAcademicaService');
@@ -233,11 +234,12 @@ class IcoOrientacionService {
       analisisLLM.carrerasRecomendadas = (analisisLLM.carrerasRecomendadas || []).map((rec) => {
         const nombreCarrera = (rec.nombre || rec.name || '').trim() || 'Carrera recomendada';
         const spec = carrerasPorNombre[normalizar(nombreCarrera)];
+        const facultyRaw = spec ? (spec.faculty || '') : '';
         return {
           nombre: nombreCarrera,
           name: nombreCarrera,
           razon: rec.razon || rec.razón || '',
-          facultad: spec ? (spec.faculty || '') : '',
+          facultad: helpers.normalizarFacultadParaDisplay(facultyRaw),
           area: spec ? (spec.area || '') : '',
         };
       });
