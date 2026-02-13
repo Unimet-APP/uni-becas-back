@@ -134,9 +134,26 @@ class IcoOrientacionService {
     });
     const preguntasMap = Object.fromEntries(preguntas.map((p) => [p.id, p]));
 
+    // Mapeo Likert: acepta string ('Frecuentemente','A veces','Nunca') o número (2,1,0)
+    const LIKERT_MAP = { 'Frecuentemente': 2, 'A veces': 1, 'Nunca': 0 };
+
     const registrosRespuesta = respuestas.map((r) => {
       const pregunta = preguntasMap[r.pregunta_id];
-      const respuestaBool = r.respuesta === true || r.respuesta === 'true' || r.respuesta === 1;
+
+      // Calcular valor Likert (2/1/0)
+      let valorLikert;
+      if (typeof r.respuesta === 'number' && [0, 1, 2].includes(r.respuesta)) {
+        valorLikert = r.respuesta;
+      } else if (typeof r.respuesta === 'string' && LIKERT_MAP[r.respuesta] !== undefined) {
+        valorLikert = LIKERT_MAP[r.respuesta];
+      } else {
+        // Backward compat: boolean o string boolean
+        const esBool = r.respuesta === true || r.respuesta === 'true' || r.respuesta === 1;
+        valorLikert = esBool ? 2 : 0;
+      }
+
+      const respuestaBool = valorLikert > 0;
+
       return {
         sesion_id: sesionId,
         pregunta_id: r.pregunta_id,
@@ -147,6 +164,7 @@ class IcoOrientacionService {
         dimension_predicha: pregunta?.dimension_principal || 'N/A',
         tiempo_respuesta: typeof r.tiempo_respuesta === 'number' ? r.tiempo_respuesta : 0,
         nivel_seguridad: r.nivel_seguridad === 'no_seguro' ? 'no_seguro' : 'seguro',
+        valor_likert: valorLikert,
       };
     });
 
@@ -154,7 +172,7 @@ class IcoOrientacionService {
 
     const respuestasGuardadas = await RespuestasTestOrientacion.findAll({
       where: { sesion_id: sesionId },
-      attributes: ['pregunta_id', 'respuesta'],
+      attributes: ['pregunta_id', 'respuesta', 'valor_likert'],
     });
 
     const puntuaciones = await testOrientacionService.calcularPuntuaciones(
@@ -162,6 +180,7 @@ class IcoOrientacionService {
         pregunta_id: r.pregunta_id,
         respuesta: r.respuesta,
         preguntaId: r.pregunta_id,
+        valor_likert: r.valor_likert,
       })),
       TIPO_TEST_ICO
     );

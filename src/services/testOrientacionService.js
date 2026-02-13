@@ -310,28 +310,29 @@ class TestOrientacionService {
       if (dimensionPrincipal && puntuaciones.hasOwnProperty(dimensionPrincipal)) {
         // Peso de la pregunta
         const peso = this._obtenerPesoNumerico(pregunta.peso_pregunta || 'media');
-        
-        // Si la respuesta es positiva (true), suma puntos a la dimensión principal
-        // Para preguntas con opciones, true significa que se seleccionó una opción
-        // que corresponde a la dimensión principal
-        if (respuesta.respuesta === true) {
-          puntuaciones[dimensionPrincipal] += peso;
-          
-          // Si la pregunta tiene opciones, también considerar dimensiones secundarias
-          // según el tipo de pregunta
-          if (tieneOpciones) {
-            const dimensionesSecundarias = pregunta.dimension_secundaria || [];
-            if (Array.isArray(dimensionesSecundarias)) {
-              dimensionesSecundarias.forEach(dimSec => {
-                if (puntuaciones.hasOwnProperty(dimSec)) {
-                  puntuaciones[dimSec] += peso * 0.2; // 20% del peso principal para opciones
-                }
-              });
+
+        // ICO con escala Likert: ponderar según valor_likert (2=Frecuentemente, 1=A veces, 0=Nunca)
+        if (tipoTest === 'ICO') {
+          const valorLikert = respuesta.valor_likert ?? (respuesta.respuesta === true ? 2 : 0);
+          // Frecuentemente (2) → peso × 1.0 | A veces (1) → peso × 0.5 | Nunca (0) → 0
+          puntuaciones[dimensionPrincipal] += peso * (valorLikert / 2);
+        } else {
+          // Holland RIASEC: lógica boolean existente sin cambios
+          if (respuesta.respuesta === true) {
+            puntuaciones[dimensionPrincipal] += peso;
+            
+            // Si la pregunta tiene opciones, también considerar dimensiones secundarias
+            if (tieneOpciones) {
+              const dimensionesSecundarias = pregunta.dimension_secundaria || [];
+              if (Array.isArray(dimensionesSecundarias)) {
+                dimensionesSecundarias.forEach(dimSec => {
+                  if (puntuaciones.hasOwnProperty(dimSec)) {
+                    puntuaciones[dimSec] += peso * 0.2; // 20% del peso principal para opciones
+                  }
+                });
+              }
             }
           }
-        } else {
-          // Si la respuesta es false y hay opciones, podría corresponder a otra dimensión
-          // Por ahora, no sumamos puntos si es false
         }
       }
     }

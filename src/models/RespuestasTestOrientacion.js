@@ -73,6 +73,12 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: false,
                 comment: 'Tiempo de respuesta de la pregunta',
               },
+              valor_likert: {
+                type: DataTypes.INTEGER,
+                allowNull: true,
+                defaultValue: null,
+                comment: 'Valor Likert: 2=Frecuentemente, 1=A veces, 0=Nunca (solo ICO)',
+              },
               nivel_seguridad: {
                 type: DataTypes.ENUM('seguro','no_seguro'),
                 allowNull: false,

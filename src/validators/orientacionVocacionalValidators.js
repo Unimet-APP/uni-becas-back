@@ -104,10 +104,16 @@ const sesionIdParamSchema = Joi.object({
 });
 
 // Schema para guardar respuestas test ICO (una sola ronda, todas las preguntas)
+// Acepta escala Likert ('Frecuentemente','A veces','Nunca' o 2,1,0) y boolean por backward compat
 const respuestaICOSchema = Joi.object({
   pregunta_id: Joi.string().uuid().optional(),
   preguntaId: Joi.string().uuid().optional(),
-  respuesta: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false', '1', '0'), Joi.number().valid(0, 1)).required()
+  respuesta: Joi.alternatives().try(
+    Joi.string().valid('Frecuentemente', 'A veces', 'Nunca'),
+    Joi.number().valid(0, 1, 2),
+    Joi.boolean(),
+    Joi.string().valid('true', 'false', '1', '0')
+  ).required()
     .messages({ 'any.required': 'respuesta es requerida' }),
   tiempo_respuesta: Joi.number().integer().min(0).optional(),
   nivel_seguridad: Joi.string().valid('seguro', 'no_seguro').optional(),
