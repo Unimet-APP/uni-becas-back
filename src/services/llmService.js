@@ -4,6 +4,25 @@ const grokValidationService = require('./grokValidationService');
 const huggingfaceValidationService = require('./huggingfaceValidationService');
 const ApiError = require('../utils/ApiError');
 
+/** Instrucción para que el chat responda en texto plano, sin markdown visible */
+const CHAT_SYSTEM_INSTRUCTION = `Responde siempre en texto plano, fácil de leer en un chat. No uses formato markdown: no asteriscos para negrita (**texto**), no almohadillas para títulos (##), no guiones bajos para cursiva. Puedes usar listas con números o guiones normales (1. 2. o -) y párrafos cortos. La respuesta debe verse bien sin interpretar markdown.`;
+
+/**
+ * Quita markdown común de un texto para mostrarlo en plano (evita que se vean ** o ##).
+ */
+function limpiarMarkdownParaChat(texto) {
+  if (!texto || typeof texto !== 'string') return texto;
+  return texto
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 class LLMService {
   constructor() {
     // ✅ CORREGIDO: Pasar objeto con { model: modelName } y configuraciones
@@ -304,8 +323,8 @@ INSTRUCCIONES:
   }
 
   /**
-   * Chat con historial de conversación
-   * ✅ CORREGIDO: Historial excluye el último mensaje y convierte 'assistant' a 'model'
+   * Chat con historial de conversación.
+   * Usa instrucción de sistema para respuestas en texto plano y limpia markdown residual.
    */
   async chat(mensajes, contexto = {}) {
     try {
@@ -319,36 +338,39 @@ INSTRUCCIONES:
       const mensajesAnteriores = mensajes.slice(0, -1);
 
       // Construir historial solo con los mensajes anteriores
-      // ✅ CORREGIDO: Convertir 'assistant' a 'model' (formato que espera Gemini)
       const historial = mensajesAnteriores.map(msg => {
         const role = msg.role === 'assistant' ? 'model' : (msg.role || 'user');
-        
         return {
           role: role,
           parts: [{ text: msg.content }]
         };
       });
 
+      // Modelo con instrucción de sistema para no usar markdown en las respuestas
+      const chatModel = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: CHAT_SYSTEM_INSTRUCTION,
+        generationConfig,
+        safetySettings
+      });
+
       let result;
-      
       if (historial.length > 0) {
-        // Si hay historial, usar startChat con historial
-        const chat = this.model.startChat({
+        const chat = chatModel.startChat({
           history: historial,
-          generationConfig: generationConfig,
-          safetySettings: safetySettings
+          generationConfig,
+          safetySettings
         });
-        
-        // ✅ CORREGIDO: Enviar solo el último mensaje
         result = await chat.sendMessage(ultimoMensaje.content);
       } else {
-        // Si no hay historial, usar generateContent directamente
-        result = await this.model.generateContent(ultimoMensaje.content);
+        result = await chatModel.generateContent(ultimoMensaje.content);
       }
 
       const response = await result.response;
-      const text = response.text();
-      
+      let text = response.text();
+      // Limpiar markdown residual para que no se vean ** o ## en el chat
+      text = limpiarMarkdownParaChat(text);
+
       return text;
     } catch (error) {
       console.error('Error en chat:', error);

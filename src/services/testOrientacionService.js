@@ -183,7 +183,7 @@ class TestOrientacionService {
         fecha_ronda_1: new Date(),
         preguntas_ronda_1: respuestas.map(r => r.preguntaId),
         puntuaciones_ronda_1: puntuaciones,
-        nivel_confianza_ronda_1: this.calcularNivelConfianza(puntuaciones),
+        nivel_confianza_ronda_1: Math.min(99.99, this.calcularNivelConfianza(puntuaciones)),
         areas_ambiguedad: ambiguedades,
       });
 
@@ -248,13 +248,14 @@ class TestOrientacionService {
         {}
       );
 
-      // Actualizar sesión
+      // Actualizar sesión (DECIMAL(4,2) acepta máx 99.99; calcularNivelConfianza puede devolver 100)
+      const nivelConfianzaR2 = Math.min(99.99, this.calcularNivelConfianza(puntuacionesRonda2));
       await sesion.update({
         estado: 'ronda_2_completada',
         fecha_ronda_2: new Date(),
         preguntas_ronda_2: respuestas.map(r => r.preguntaId),
         puntuaciones_ronda_2: puntuacionesRonda2,
-        nivel_confianza_ronda_2: this.calcularNivelConfianza(puntuacionesRonda2),
+        nivel_confianza_ronda_2: nivelConfianzaR2,
       });
 
       return {
