@@ -4,8 +4,137 @@ const grokValidationService = require('./grokValidationService');
 const huggingfaceValidationService = require('./huggingfaceValidationService');
 const ApiError = require('../utils/ApiError');
 
-/** Instrucción para que el chat responda en texto plano, sin markdown visible */
-const CHAT_SYSTEM_INSTRUCTION = `Responde siempre en texto plano, fácil de leer en un chat. No uses formato markdown: no asteriscos para negrita (**texto**), no almohadillas para títulos (##), no guiones bajos para cursiva. Puedes usar listas con números o guiones normales (1. 2. o -) y párrafos cortos. La respuesta debe verse bien sin interpretar markdown.`;
+const FORMATO_TEXTO_PLANO = `Responde siempre en texto plano, fácil de leer en un chat. No uses formato markdown: no asteriscos para negrita (**texto**), no almohadillas para títulos (##), no guiones bajos para cursiva. Puedes usar listas con números o guiones normales (1. 2. o -) y párrafos cortos. La respuesta debe verse bien sin interpretar markdown.`;
+
+/**
+ * Construye la system instruction dinámica para el chatbot institucional.
+ * Incluye: identidad UNIMET, carreras desde BD, datos institucionales y resultado del usuario.
+ */
+function construirSystemInstruction(contexto = {}) {
+  const partes = [];
+
+  partes.push(
+    'Eres el asistente de orientación vocacional de la Universidad Metropolitana (UNIMET).',
+    'Atiendes consultas sobre: carreras de la UNIMET, orientación vocacional, eventos y fechas institucionales, vías de ingreso, servicios del campus, becas y preguntas generales sobre la universidad.',
+    'Siempre responde de forma amable, clara y concisa.',
+    FORMATO_TEXTO_PLANO
+  );
+
+  // Carreras: lista explícita y regla estricta (solo estas, ninguna otra)
+  if (contexto.carreras && contexto.carreras.length > 0) {
+    const nombres = contexto.carreras.map(c => (c.name || c.nombre || '').trim()).filter(Boolean);
+    const listaNumerada = nombres.map((n, i) => `${i + 1}. ${n}`).join('\n');
+    const nombresEnLinea = nombres.join(', ');
+
+    partes.push(
+      '\n=== CARRERAS UNIMET (OBLIGATORIO) ===',
+      'Las ÚNICAS carreras que existen en la UNIMET son estas (no hay otras): ' + nombresEnLinea + '.',
+      'Prohibido inventar, añadir o mencionar cualquier carrera que no esté en la lista anterior. Al listar o recomendar carreras, usa SOLO los nombres exactos de esta lista:',
+      listaNumerada,
+      '=== FIN LISTA CARRERAS ==='
+    );
+  } else {
+    partes.push(
+      '\nNo tienes la lista de carreras cargada. Si preguntan por carreras, indica que consulten la web de la UNIMET o la Oficina de Admisión. No inventes nombres de carreras.'
+    );
+  }
+
+  // Datos institucionales (valores seguros, sin undefined)
+  if (contexto.datosInstitucionales && typeof contexto.datosInstitucionales === 'object') {
+    const datos = contexto.datosInstitucionales;
+    const s = (v) => (v == null ? '' : String(v).trim());
+
+    if (datos.institucion) {
+      const inst = datos.institucion;
+      const dir = inst.direccion || {};
+      const cg = inst.contacto_general || {};
+      partes.push(
+        '\n=== INFORMACIÓN INSTITUCIONAL ===',
+        'Nombre: ' + s(inst.nombre) + ' (' + s(inst.siglas) + ')',
+        'Régimen académico: ' + s(inst.regimen_academico),
+        'Sede: ' + s(dir.sede) + '. Referencia: ' + s(dir.referencia) + '. ' + s(dir.ciudad) + ', ' + s(dir.estado) + ', ' + s(dir.pais),
+        'Web: ' + s(cg.web) + ' | Teléfono: ' + s(cg.telefono_master || cg.telefono) + ' | Email: ' + s(cg.email)
+      );
+      if (s(cg.whatsapp_admision)) partes.push('WhatsApp Admisión: ' + s(cg.whatsapp_admision));
+    }
+
+    if (Array.isArray(datos.vias_de_ingreso) && datos.vias_de_ingreso.length > 0) {
+      partes.push('\n--- VÍAS DE INGRESO ---');
+      datos.vias_de_ingreso.forEach((v) => {
+        partes.push(s(v.metodo) + ': ' + s(v.nombre_completo) + '. ' + s(v.descripcion));
+      });
+    }
+
+    if (Array.isArray(datos.eventos) && datos.eventos.length > 0) {
+      partes.push('\n--- EVENTOS Y FECHAS ---');
+      datos.eventos.forEach((e) => {
+        const fecha = s(e.fecha_texto) || s(e.proxima_fecha) || s(e.fecha) || 'Por confirmar';
+        const lugar = s(e.lugar) || 'Campus UNIMET';
+        partes.push(s(e.nombre) + '. ' + s(e.descripcion) + ' Fecha: ' + fecha + '. Lugar: ' + lugar);
+      });
+    }
+
+    if (datos.servicios_campus && typeof datos.servicios_campus === 'object') {
+      const sc = datos.servicios_campus;
+      partes.push('\n--- SERVICIOS DEL CAMPUS ---');
+      if (sc.transporte) {
+        const t = sc.transporte;
+        const puntos = Array.isArray(t.puntos_salida) ? t.puntos_salida.join(', ') : '';
+        partes.push('Transporte: ' + s(t.nombre) + (puntos ? ' (Salidas: ' + puntos + '). ' : '. ') + s(t.descripcion));
+      }
+      if (sc.biblioteca) {
+        const b = sc.biblioteca;
+        partes.push('Biblioteca: ' + s(b.nombre) + '. ' + s(b.destacado));
+      }
+      if (sc.seguridad) partes.push('Seguridad: ' + s(sc.seguridad));
+    }
+
+    if (Array.isArray(datos.contactos_por_tema) && datos.contactos_por_tema.length > 0) {
+      partes.push('\n--- CONTACTOS POR TEMA ---');
+      datos.contactos_por_tema.forEach((c) => {
+        let linea = s(c.tema) + ' - ' + s(c.area);
+        if (c.email) linea += ' | Email: ' + s(c.email);
+        if (c.telefono) linea += ' | Tel: ' + s(c.telefono);
+        if (c.descripcion) linea += ' | ' + s(c.descripcion);
+        partes.push(linea);
+      });
+    }
+    partes.push('=== FIN INFORMACIÓN INSTITUCIONAL ===');
+  }
+
+  if (contexto.resultadoUsuario) {
+    const r = contexto.resultadoUsuario;
+    partes.push('\nCONTEXTO DEL USUARIO (tiene resultado de test de orientación):');
+    partes.push(`- Tipo de test: ${r.tipo_test || 'N/A'}`);
+    if (r.codigo_holland) partes.push(`- Código Holland: ${r.codigo_holland}`);
+    if (r.perfil_dominante) partes.push(`- Perfil dominante: ${r.perfil_dominante}`);
+    if (r.perfil_secundario) partes.push(`- Perfil secundario: ${r.perfil_secundario}`);
+
+    if (r.puntuaciones_finales && typeof r.puntuaciones_finales === 'object') {
+      const punts = Object.entries(r.puntuaciones_finales)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(', ');
+      partes.push(`- Puntuaciones: ${punts}`);
+    }
+
+    if (r.analisis_llm) {
+      const analisis = typeof r.analisis_llm === 'string' ? (() => { try { return JSON.parse(r.analisis_llm); } catch { return null; } })() : r.analisis_llm;
+      if (analisis?.carrerasRecomendadas) {
+        const recs = analisis.carrerasRecomendadas.map(c => c.nombre || c.carrera).filter(Boolean).join(', ');
+        if (recs) partes.push(`- Carreras recomendadas previamente: ${recs}`);
+      }
+      if (analisis?.perfilVocacional?.resumen) {
+        partes.push(`- Resumen de perfil: ${analisis.perfilVocacional.resumen}`);
+      }
+    }
+
+    partes.push('Usa esta información para personalizar tus respuestas y recomendaciones. Si el usuario pregunta por carreras o recomendaciones, prioriza las que encajen con su perfil.');
+  }
+
+  partes.push('\nSi no tienes un dato institucional en tu contexto, indícalo y sugiere contactar a la universidad directamente.');
+
+  return partes.filter((p) => p != null && String(p).trim() !== '').join('\n');
+}
 
 /**
  * Quita markdown común de un texto para mostrarlo en plano (evita que se vean ** o ##).
@@ -41,13 +170,21 @@ class LLMService {
    */
   async generarRespuesta(prompt, context = {}) {
     try {
-      // Construir el prompt completo con contexto
       const promptCompleto = this.construirPrompt(prompt, context);
-      
-      const result = await this.model.generateContent(promptCompleto);
+      const systemInstruction = construirSystemInstruction(context._institucional || {});
+
+      const consultaModel = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction,
+        generationConfig,
+        safetySettings
+      });
+
+      const result = await consultaModel.generateContent(promptCompleto);
       const response = await result.response;
-      const text = response.text();
-      
+      let text = response.text();
+      text = limpiarMarkdownParaChat(text);
+
       return text;
     } catch (error) {
       console.error('Error en LLM Service:', error);
@@ -328,16 +465,13 @@ INSTRUCCIONES:
    */
   async chat(mensajes, contexto = {}) {
     try {
-      // Validar que hay mensajes
       if (!mensajes || !Array.isArray(mensajes) || mensajes.length === 0) {
         throw new Error('Se requiere un array de mensajes con al menos un mensaje');
       }
 
-      // Separar el último mensaje (se envía por separado)
       const ultimoMensaje = mensajes[mensajes.length - 1];
       const mensajesAnteriores = mensajes.slice(0, -1);
 
-      // Construir historial solo con los mensajes anteriores
       const historial = mensajesAnteriores.map(msg => {
         const role = msg.role === 'assistant' ? 'model' : (msg.role || 'user');
         return {
@@ -346,10 +480,11 @@ INSTRUCCIONES:
         };
       });
 
-      // Modelo con instrucción de sistema para no usar markdown en las respuestas
+      const systemInstruction = construirSystemInstruction(contexto);
+
       const chatModel = genAI.getGenerativeModel({
         model: modelName,
-        systemInstruction: CHAT_SYSTEM_INSTRUCTION,
+        systemInstruction,
         generationConfig,
         safetySettings
       });
@@ -368,13 +503,11 @@ INSTRUCCIONES:
 
       const response = await result.response;
       let text = response.text();
-      // Limpiar markdown residual para que no se vean ** o ## en el chat
       text = limpiarMarkdownParaChat(text);
 
       return text;
     } catch (error) {
       console.error('Error en chat:', error);
-      // Mostrar más detalles del error para debugging
       if (error.message) {
         console.error('Mensaje de error:', error.message);
       }

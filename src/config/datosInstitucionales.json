@@ -1,0 +1,92 @@
+{
+  "institucion": {
+    "nombre": "Universidad Metropolitana",
+    "siglas": "UNIMET",
+    "regimen_academico": "Trimestral (Enero, Mayo, Septiembre)",
+    "direccion": {
+      "sede": "Terrazas del Ávila",
+      "referencia": "Distribuidor Universidad, Autopista Petare-Guarenas",
+      "ciudad": "Caracas",
+      "estado": "Miranda",
+      "codigo_postal": "1073",
+      "pais": "Venezuela"
+    },
+    "contacto_general": {
+      "telefono_master": "+58 212 240 3111",
+      "web": "https://www.unimet.edu.ve",
+      "email": "info@unimet.edu.ve",
+      "whatsapp_admision": "+58 414 233 2641"
+    }
+  },
+  "vias_de_ingreso": [
+    {
+      "metodo": "PDU",
+      "nombre_completo": "Prueba Diagnóstica de Ubicación",
+      "descripcion": "Examen estándar de conocimientos para ingreso directo."
+    },
+    {
+      "metodo": "CPU",
+      "nombre_completo": "Curso de Preparación Universitaria",
+      "descripcion": "Curso pre-universitario que permite el ingreso al aprobar los módulos."
+    },
+    {
+      "metodo": "Convenios",
+      "nombre_completo": "Ingreso por Convenio con Colegios",
+      "descripcion": "Pase directo para estudiantes destacados de instituciones aliadas."
+    },
+    {
+      "metodo": "Transferencia",
+      "nombre_completo": "Ingreso Indirecto",
+      "descripcion": "Para estudiantes provenientes de otras universidades nacionales o extranjeras."
+    }
+  ],
+  "eventos": [
+    {
+      "id": "pdu_2026",
+      "nombre": "PDU - Prueba Diagnóstica de Ubicación",
+      "descripcion": "Próxima convocatoria de admisión para nuevos ingresos.",
+      "proxima_fecha": "2026-03-21",
+      "fecha_texto": "21 de marzo de 2026",
+      "lugar": "Campus UNIMET / Online",
+      "tipo": "admision"
+    }
+  ],
+  "servicios_campus": {
+    "transporte": {
+      "nombre": "Rutas El Samán",
+      "puntos_salida": ["Altamira", "La California"],
+      "descripcion": "Servicio de transporte exclusivo para la comunidad universitaria."
+    },
+    "biblioteca": {
+      "nombre": "Biblioteca Pedro Grases",
+      "destacado": "Uno de los centros de documentación más importantes del país."
+    },
+    "seguridad": "Vigilancia privada 24/7 con control de acceso en Terrazas del Ávila."
+  },
+  "contactos_por_tema": [
+    {
+      "tema": "Admisión",
+      "area": "Oficina de Admisión y Control de Estudios",
+      "email": "admision@unimet.edu.ve",
+      "telefono": "+58 212 240 3260"
+    },
+    {
+      "tema": "Becas",
+      "area": "Dirección de Bienestar Estudiantil",
+      "email": "bienestarestudiantil@unimet.edu.ve",
+      "telefono": "+58 212 240 3452"
+    },
+    {
+      "tema": "Orientación",
+      "area": "Unidad de Orientación y Consejería",
+      "email": "orientacion@unimet.edu.ve",
+      "descripcion": "Asesoría vocacional y apoyo psicológico."
+    },
+    {
+      "tema": "Institucional",
+      "area": "Rectorado",
+      "email": "rectorado@unimet.edu.ve",
+      "telefono": "+58 212 240 3211"
+    }
+  ]
+}

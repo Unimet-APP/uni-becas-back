@@ -3,6 +3,7 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const llmController = require('../controllers/llmController');
 const { validateChat, validateConsulta, validateRecomendaciones} = require('../validators/llmValidators');
+const { optionalAuth } = require('../middleware/auth');
 
 // Rate limiting para prevenir abuso (sin autenticación)
 const chatRateLimit = rateLimit({
@@ -16,10 +17,9 @@ const chatRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
-// ❌ SIN authenticate, SIN requireAccesoOrientacionVocacional
-// Ruta pública con rate limiting
-router.post('/chat', chatRateLimit, validateChat, llmController.chat);
-router.post('/consulta', chatRateLimit, validateConsulta, llmController.consulta);
-router.post('/recomendaciones', chatRateLimit, validateRecomendaciones, llmController.generarRecomendaciones);
+// Rutas públicas con rate limiting + optionalAuth (detecta usuario si envía JWT)
+router.post('/chat', chatRateLimit, optionalAuth, validateChat, llmController.chat);
+router.post('/consulta', chatRateLimit, optionalAuth, validateConsulta, llmController.consulta);
+router.post('/recomendaciones', chatRateLimit, optionalAuth, validateRecomendaciones, llmController.generarRecomendaciones);
 
 module.exports = router;
