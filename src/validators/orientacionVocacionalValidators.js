@@ -116,7 +116,9 @@ const respuestaICOSchema = Joi.object({
   ).required()
     .messages({ 'any.required': 'respuesta es requerida' }),
   tiempo_respuesta: Joi.number().integer().min(0).optional(),
+  tiempoRespuesta: Joi.number().integer().min(0).optional(),
   nivel_seguridad: Joi.string().valid('seguro', 'no_seguro').optional(),
+  nivelSeguridad: Joi.string().valid('seguro', 'no_seguro').optional(),
 }).or('pregunta_id', 'preguntaId');
 
 const guardarRespuestasICOSchema = Joi.object({
